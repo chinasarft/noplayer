@@ -4,6 +4,8 @@
 #include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLShaderProgram>
 #include <QtGui/QOpenGLFunctions>
+#include <QtMultimedia>
+#include <memory>
 
 class QGLRenderer : public QObject, protected QOpenGLFunctions
 {
@@ -29,6 +31,20 @@ private:
     QOpenGLShaderProgram *m_program;
     QQuickWindow *m_window;
     GLuint m_textures[3];
+};
+
+class AudioRender{
+public:
+    const static int ulawType = 1;
+    const static int alawType = 2;
+    AudioRender();
+    void PushData(void *pcmData,int size);
+    void PushG711Data(void *g711Data, int size, int lawType);
+private:
+    QAudioFormat m_audioConfig;
+    std::shared_ptr<QAudioOutput> m_audioOutput;
+    bool m_canPlay;
+    QIODevice *m_device;
 };
 
 class IcePlayer : public QQuickItem

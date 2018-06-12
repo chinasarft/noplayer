@@ -4,6 +4,7 @@
 #include <QtGui/QOpenGLContext>
 #include <QDebug>
 #include <QFile>
+#include "g711.h"
 
 #define VW 480
 #define VH 288
@@ -164,6 +165,52 @@ void QGLRenderer::paint()
     m_window->resetOpenGLState();
 }
 
+AudioRender::AudioRender(){
+    m_audioConfig.setSampleRate(8000);
+    m_audioConfig.setChannelCount(1);
+    m_audioConfig.setSampleSize(16);
+    m_audioConfig.setCodec("audio/pcm");
+    m_audioConfig.setByteOrder(QAudioFormat::LittleEndian);
+    m_audioConfig.setSampleType(QAudioFormat::UnSignedInt);
+    QAudioDeviceInfo info = QAudioDeviceInfo::defaultOutputDevice();
+    if (!info.isFormatSupported(m_audioConfig)) {
+        qDebug()<<"default format not supported try to use nearest";
+        m_audioConfig = info.nearestFormat(m_audioConfig);
+        m_canPlay = false;
+        return;
+    }
+    m_canPlay = true;
+    m_audioOutput = std::make_shared<QAudioOutput>(m_audioConfig);
+    m_device = m_audioOutput->start();
+}
+
+void AudioRender::PushData(void *pcmData,int size){
+    if(m_canPlay == false)
+        return;
+
+    m_device->write((const char *)pcmData, size);
+}
+
+void AudioRender::PushG711Data(void *g711Data, int size, int lawType){
+    if(m_canPlay == false)
+        return;
+    short pcm[1280];
+    unsigned char *src = (unsigned char*)g711Data;
+
+
+    if (lawType == alawType) {
+        for (int i = 0; i < size; i++) {
+            pcm[i] = alaw2linear(src[i]);
+            PushData(pcm, size * 2);
+        }
+    } else if (lawType == ulawType) {
+        for (int i = 0; i < size; i++) {
+            pcm[i] = ulaw2linear(src[i]);
+            PushData(pcm, size * 2);
+        }
+    }
+}
+
 #include <QDir>
 IcePlayer::IcePlayer()
   : m_t(0)
@@ -220,7 +267,12 @@ void IcePlayer::sync()
         m_renderer = new QGLRenderer();
         connect(window(), &QQuickWindow::beforeRendering, m_renderer, &QGLRenderer::paint, Qt::DirectConnection);
     }
-    m_renderer->setViewportSize(window()->size() * window()->devicePixelRatio());
+    //m_renderer->setViewportSize(window()->size() * window()->devicePixelRatio());
+    QSize wsize = window()->size();
+    qDebug()<<wsize;
+    //window()->findChild<>;
+
+    m_renderer->setViewportSize(wsize * window()->devicePixelRatio());
     m_renderer->setT(m_t);
     m_renderer->setWindow(window());
 }
