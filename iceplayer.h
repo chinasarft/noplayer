@@ -16,6 +16,10 @@ public:
     void setViewportSize(const QSize &size) { m_viewportSize = size; }
     void setWindow(QQuickWindow *window) { m_window = window; }
 
+    const int TextureYIndex = 0;
+    const int TextureUIndex = 1;
+    const int TextureVIndex = 2;
+
 public slots:
     void paint();
 
@@ -24,6 +28,7 @@ private:
     qreal m_t;
     QOpenGLShaderProgram *m_program;
     QQuickWindow *m_window;
+    GLuint m_textures[3];
 };
 
 class IcePlayer : public QQuickItem

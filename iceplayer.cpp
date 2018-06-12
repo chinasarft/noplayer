@@ -2,6 +2,27 @@
 #include <QtQuick/qquickwindow.h>
 #include <QtGui/QOpenGLShaderProgram>
 #include <QtGui/QOpenGLContext>
+#include <QDebug>
+#include <QFile>
+
+#define VW 480
+#define VH 288
+typedef struct YuvData{
+    char* pos[3];
+    char data[VW*VH*2];
+    int frameLen;
+    int w;
+    int h;
+    YuvData(){
+        pos[0] =  data;
+        pos[1] = data + VW*VH;
+        pos[2] = pos[1] + VW*VH/4;
+        frameLen = VW * VH * 3 / 2;
+        w = VW;
+        h = VH;
+    }
+}YuvData;
+YuvData yuvData;
 
 QGLRenderer::~QGLRenderer()
 {
@@ -9,30 +30,55 @@ QGLRenderer::~QGLRenderer()
 }
 
 QGLRenderer::QGLRenderer() : m_t(0), m_program(0) {
+    m_textures[0] = 0;
+    m_textures[1] = 0;
+    m_textures[2] = 0;
     if (!m_program) {
         initializeOpenGLFunctions();
 
         m_program = new QOpenGLShaderProgram();
         m_program->addCacheableShaderFromSourceCode(QOpenGLShader::Vertex,
-                                                    "attribute highp vec4 vertices;"
-                                                    "varying highp vec2 coords;"
-                                                    "void main() {"
-                                                    "    gl_Position = vertices;"
-                                                    "    coords = vertices.xy;"
-                                                    "}");
+                                                    "attribute highp vec3 vertexIn;\n"
+                                                    "attribute highp vec2 textureIn;\n"
+                                                    "varying vec2 textureOut;\n"
+                                                    "void main(void)\n"
+                                                    "{\n"
+                                                    "	gl_Position = vec4(vertexIn, 1.0);\n"
+                                                    "	textureOut = textureIn;\n"
+                                                    "}\n");
         m_program->addCacheableShaderFromSourceCode(QOpenGLShader::Fragment,
-                                                    "uniform lowp float t;"
-                                                    "varying highp vec2 coords;"
-                                                    "void main() {"
-                                                    "    lowp float i = 1. - (pow(abs(coords.x), 4.) + pow(abs(coords.y), 4.));"
-                                                    "    i = smoothstep(t - 0.8, t + 0.8, i);"
-                                                    "    i = floor(i * 20.) / 20.;"
-                                                    "    gl_FragColor = vec4(coords * .5 + .5, i, i);"
-                                                    "}");
+                                                    "varying vec2 textureOut;\n"
+                                                    "uniform sampler2D tex0;\n"
+                                                    "uniform sampler2D tex1;\n"
+                                                    "uniform sampler2D tex2;\n"
+                                                    "void main(void)\n"
+                                                    "{\n"
+                                                    "	vec3 yuv;\n"
+                                                    "	vec3 rgb;\n"
+                                                    "	yuv.x = texture2D(tex0, textureOut).r;\n"
+                                                    "	yuv.y = texture2D(tex1, textureOut).r - 0.5;\n"
+                                                    "	yuv.z = texture2D(tex2, textureOut).r - 0.5;\n"
+                                                    "	rgb = mat3(1, 1, 1,\n"
+                                                    "		0, -0.39465, 2.03211,\n"
+                                                    "		1.13983, -0.58060, 0) * yuv;\n"
+                                                    "	//gl_FragColor = vec4(0.0,0.0,1.0, 1);\n"
+                                                    "	gl_FragColor = vec4(rgb, 1);\n"
+                                                    "}\n");
 
         m_program->bindAttributeLocation("vertices", 0);
         m_program->link();
 
+        glGenTextures(3, m_textures);
+        for (int i = 0; i < 3; i++) {
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]); // All upcoming GL_TEXTURE_2D operations now have effect on our texture object
+            // Set our texture parameters
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);    // Note that we set our container wrapping method to GL_CLAMP_TO_EDGE
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);    // Note that we set our container wrapping method to GL_CLAMP_TO_EDGE
+            // Set texture filtering
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]); // Unbind texture when done, so we won't accidentily mess up our texture.
+        }
     }
 }
 
@@ -41,26 +87,60 @@ void QGLRenderer::paint()
 {
     m_program->bind();
     m_program->enableAttributeArray(0);
-
+#if 1
+    m_program->enableAttributeArray(1);
     float values[] = {
-        -1, -1,
-        1, -1,
-        -1, 1,
-        1, 1
+        //left top triangle
+        -1.0f, -1.0f, 0.0f,     0.0f, 1.0f,
+        1.0f, 1.0f, 0.0f,       1.0f, 0.0f,
+        -1.0f, 1.0f, 0.0f,      0.0f, 0.0f,
+        //right down triangle
+        -1.0f, -1.0f, 0.0f,     0.0f, 1.0f,
+        1.0f, -1.0f, 0.0f,      1.0f, 1.0f,
+        1.0f, 1.0f, 0.0f,       1.0f, 0.0f,
+    #if 0
+        //left down triangle
+        1.0f, -1.0f, 0.0f,       1.0f, 1.0f,
+        -1.0f, 1.0f, 0.0f,       0.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f,      0.0f, 1.0f,
+        //right top triangle
+        1.0f, -1.0f, 0.0f,     1.0f, 1.0f,
+        1.0f, 1.0f, 0.0f,       1.0f, 0.0f,
+        -1.0f, 1.0f, 0.0f,      0.0f, 0.0f,
+    #endif
     };
 
-    m_program->setAttributeArray(0, GL_FLOAT, values, 2);
+    //m_program->setAttributeArray(0, GL_FLOAT, values, 2);
+    m_program->setAttributeArray(0, GL_FLOAT, values, 3, 5 * sizeof(GLfloat));
+    m_program->setAttributeArray(1, GL_FLOAT, &values[3], 2, 5 * sizeof(GLfloat));
 
-#if 1
+    for (int i = 0, j = 1; i < 3; i++, j = 2) {
+        char name[5] = {0};
+        sprintf(name, "tex%d", i);
+        int location = m_program->uniformLocation(name);;
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, yuvData.w/j,
+                     yuvData.h/j, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, yuvData.pos[i]);
+        glUniform1i(location, i);
+    }
+
     int colorLocation = m_program->uniformLocation("color");
     QColor color(255, 0, 0, 100);
     m_program->setUniformValue(colorLocation, color);
 
     glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
     glDisable(GL_DEPTH_TEST);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
 
 #else
+    float values[] = {
+            -1, -1,
+            1, -1,
+            -1, 1,
+            1, 1
+    };
+    m_program->setAttributeArray(0, GL_FLOAT, values, 2);
     m_program->setUniformValue("t", (float) m_t);
 
     glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
@@ -84,12 +164,24 @@ void QGLRenderer::paint()
     m_window->resetOpenGLState();
 }
 
-
+#include <QDir>
 IcePlayer::IcePlayer()
   : m_t(0)
   , m_renderer(0)
 {
     connect(this, &QQuickItem::windowChanged, this, &IcePlayer::handleWindowChanged);
+
+    qDebug()<<QDir::currentPath();
+    QFile file("/Users/liuye/Documents/qml/iceplayer/hks_480_288.yuv");
+    if(!file.open(QIODevice::ReadOnly))
+    {
+        qDebug()<<"Can't open the file!";
+    } else {
+        printf("frameLen:%d  base dataAddr:%p\n", yuvData.frameLen, &yuvData.data);
+        printf("pos0=%p pos1=%p pos2=%p\n", yuvData.pos[0], yuvData.pos[1], yuvData.pos[2]);
+        printf("pos2-pos1=%p, pos1-pos0=%p\n", yuvData.pos[2] - yuvData.pos[1], yuvData.pos[1] - yuvData.pos[0]);
+        file.read(yuvData.data, yuvData.frameLen);
+    }
 }
 
 
