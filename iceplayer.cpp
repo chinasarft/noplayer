@@ -171,17 +171,19 @@ AudioRender::AudioRender(){
     m_audioConfig.setSampleSize(16);
     m_audioConfig.setCodec("audio/pcm");
     m_audioConfig.setByteOrder(QAudioFormat::LittleEndian);
-    m_audioConfig.setSampleType(QAudioFormat::UnSignedInt);
+    m_audioConfig.setSampleType(QAudioFormat::SignedInt);
+    m_canPlay = false;
     QAudioDeviceInfo info = QAudioDeviceInfo::defaultOutputDevice();
     if (!info.isFormatSupported(m_audioConfig)) {
         qDebug()<<"default format not supported try to use nearest";
         m_audioConfig = info.nearestFormat(m_audioConfig);
-        m_canPlay = false;
         return;
     }
     m_canPlay = true;
     m_audioOutput = std::make_shared<QAudioOutput>(m_audioConfig);
     m_device = m_audioOutput->start();
+    m_audioOutput->setVolume(0.8);
+    qDebug()<<"volume:"<<m_audioOutput->volume();
 }
 
 void AudioRender::PushData(void *pcmData,int size){
@@ -201,20 +203,20 @@ void AudioRender::PushG711Data(void *g711Data, int size, int lawType){
     if (lawType == alawType) {
         for (int i = 0; i < size; i++) {
             pcm[i] = alaw2linear(src[i]);
-            PushData(pcm, size * 2);
         }
+        PushData(pcm, size * 2);
     } else if (lawType == ulawType) {
         for (int i = 0; i < size; i++) {
             pcm[i] = ulaw2linear(src[i]);
-            PushData(pcm, size * 2);
         }
+        PushData(pcm, size * 2);
     }
 }
 
 #include <QDir>
 IcePlayer::IcePlayer()
   : m_t(0)
-  , m_renderer(0)
+  , m_vRenderer(0)
 {
     connect(this, &QQuickItem::windowChanged, this, &IcePlayer::handleWindowChanged);
 
@@ -228,7 +230,10 @@ IcePlayer::IcePlayer()
         printf("pos0=%p pos1=%p pos2=%p\n", yuvData.pos[0], yuvData.pos[1], yuvData.pos[2]);
         printf("pos2-pos1=%p, pos1-pos0=%p\n", yuvData.pos[2] - yuvData.pos[1], yuvData.pos[1] - yuvData.pos[0]);
         file.read(yuvData.data, yuvData.frameLen);
+        file.close();
     }
+
+    testpcm();
 }
 
 
@@ -255,24 +260,47 @@ void IcePlayer::handleWindowChanged(QQuickWindow *win)
 
 void IcePlayer::cleanup()
 {
-    if (m_renderer) {
-        delete m_renderer;
-        m_renderer = 0;
+    if (m_vRenderer) {
+        delete m_vRenderer;
+        m_vRenderer = 0;
     }
 }
 
 void IcePlayer::sync()
 {
-    if (!m_renderer) {
-        m_renderer = new QGLRenderer();
-        connect(window(), &QQuickWindow::beforeRendering, m_renderer, &QGLRenderer::paint, Qt::DirectConnection);
+    if (!m_vRenderer) {
+        m_vRenderer = new QGLRenderer();
+        connect(window(), &QQuickWindow::beforeRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
     }
     //m_renderer->setViewportSize(window()->size() * window()->devicePixelRatio());
     QSize wsize = window()->size();
     qDebug()<<wsize;
     //window()->findChild<>;
 
-    m_renderer->setViewportSize(wsize * window()->devicePixelRatio());
-    m_renderer->setT(m_t);
-    m_renderer->setWindow(window());
+    m_vRenderer->setViewportSize(wsize * window()->devicePixelRatio());
+    m_vRenderer->setT(m_t);
+    m_vRenderer->setWindow(window());
+}
+
+void IcePlayer::testpcm(){
+    testTimer = std::make_shared<QTimer>();
+    connect(testTimer.get(), &QTimer::timeout, this, &IcePlayer::testTimeout);
+    testTimer->start(19);
+}
+
+QFile g711File("/Users/liuye/Documents/p2p/build/src/mysiprtp/Debug/8000_1.mulaw");
+void IcePlayer::testTimeout(){
+    if (!g711File.isOpen()) {
+        g711File.open(QIODevice::ReadOnly);
+    }
+    if (g711File.isOpen()) {
+        char data[160];
+        auto rLen = g711File.read(data, 160);
+        if (rLen == 160) {
+            m_aRenderer.PushG711Data(data, 160, AudioRender::ulawType);
+        } else {
+            qDebug()<<"g711file reset";
+            g711File.reset();
+        }
+    }
 }

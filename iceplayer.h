@@ -58,19 +58,24 @@ public:
     qreal t() const { return m_t; }
     void setT(qreal t);
 
+    std::shared_ptr<QTimer> testTimer;
+    void testpcm();
+
 signals:
     void tChanged();
 
 public slots:
     void sync();
     void cleanup();
+    void testTimeout();
 
 private slots:
     void handleWindowChanged(QQuickWindow *win);
 
 private:
     qreal m_t;
-    QGLRenderer *m_renderer;
+    QGLRenderer *m_vRenderer;
+    AudioRender m_aRenderer;
 };
 
 #endif // ICEPLAYER_H
