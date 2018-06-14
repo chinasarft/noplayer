@@ -2,6 +2,8 @@
 #include <QtQuick/qquickwindow.h>
 #include <QtGui/QOpenGLShaderProgram>
 #include <QtGui/QOpenGLContext>
+#include <QtWidgets/QGraphicsView>
+#include <QtWidgets/QGraphicsScene>
 #include <QDebug>
 #include <QFile>
 #include "g711.h"
@@ -34,6 +36,10 @@ QGLRenderer::QGLRenderer() : m_t(0), m_program(0) {
     m_textures[0] = 0;
     m_textures[1] = 0;
     m_textures[2] = 0;
+    xleft = -1.0f;
+    xright = 1.0f;
+    ytop = 1.0f;
+    ybottom = -1.0f;
     if (!m_program) {
         initializeOpenGLFunctions();
 
@@ -83,6 +89,23 @@ QGLRenderer::QGLRenderer() : m_t(0), m_program(0) {
     }
 }
 
+void QGLRenderer::setDrawRect(QRectF & s, QRectF &it){
+    qreal sw = (s.right() - s.left())/2;
+    qreal sh = (s.bottom() - s.top())/2;
+
+    xleft = (it.left() - s.left() - sw) / sw;
+    xright = (it.right() - s.left() - sw) / sw;
+    ytop = (s.bottom() - it.top() - sh) / sh;
+    ybottom = (s.bottom() - it.bottom() - sh) / sh;
+
+    qDebug() <<xleft << "  " <<ybottom << "\n"
+            <<xright << "  " <<ytop<< "\n"
+           <<xleft << "  " << ytop<< "\n"
+          <<xleft << "  " << ybottom<< "\n"
+         <<xright << "  " <<ybottom<< "\n"
+        <<xright << "  " <<ytop<< "\n";
+}
+
 
 void QGLRenderer::paint()
 {
@@ -92,13 +115,13 @@ void QGLRenderer::paint()
     m_program->enableAttributeArray(1);
     float values[] = {
         //left top triangle
-        -1.0f, -1.0f, 0.0f,     0.0f, 1.0f,
-        1.0f, 1.0f, 0.0f,       1.0f, 0.0f,
-        -1.0f, 1.0f, 0.0f,      0.0f, 0.0f,
+        xleft, ybottom, 0.0f,     0.0f, 1.0f,
+        xright, ytop, 0.0f,       1.0f, 0.0f,
+        xleft, ytop, 0.0f,      0.0f, 0.0f,
         //right down triangle
-        -1.0f, -1.0f, 0.0f,     0.0f, 1.0f,
-        1.0f, -1.0f, 0.0f,      1.0f, 1.0f,
-        1.0f, 1.0f, 0.0f,       1.0f, 0.0f,
+        xleft, ybottom, 0.0f,     0.0f, 1.0f,
+        xright, ybottom, 0.0f,      1.0f, 1.0f,
+        xright, ytop, 0.0f,       1.0f, 0.0f,
     #if 0
         //left down triangle
         1.0f, -1.0f, 0.0f,       1.0f, 1.0f,
@@ -254,7 +277,7 @@ void IcePlayer::handleWindowChanged(QQuickWindow *win)
         connect(win, &QQuickWindow::sceneGraphInvalidated, this, &IcePlayer::cleanup, Qt::DirectConnection);
         // If we allow QML to do the clearing, they would clear what we paint
         // and nothing would show.
-        win->setClearBeforeRendering(false);
+        win->setClearBeforeRendering(true);
     }
 }
 
@@ -270,12 +293,39 @@ void IcePlayer::sync()
 {
     if (!m_vRenderer) {
         m_vRenderer = new QGLRenderer();
-        connect(window(), &QQuickWindow::beforeRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
+        connect(window(), &QQuickWindow::afterRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
     }
     //m_renderer->setViewportSize(window()->size() * window()->devicePixelRatio());
     QSize wsize = window()->size();
     qDebug()<<wsize;
-    //window()->findChild<>;
+
+    QObject * obj = window()->findChild<QObject *>("player");
+    if(obj != nullptr){
+        QVariant h = obj->property("height");
+        QVariant w = obj->property("width");
+        qDebug()<<"height:"<<h.type()<<h.toDouble();
+        qDebug()<<"width:"<<w.type()<<w.toDouble();
+        QVariant n = obj->property("objectName");
+        qDebug()<<"name:"<<n.type()<<n.toString();
+        obj->dumpObjectInfo();
+
+        QQuickItem * item = dynamic_cast<QQuickItem *>(obj);
+        if (item != nullptr){
+            qDebug()<<"      --->:boundingRect:"<<item->boundingRect();
+            QRectF s = item->mapRectToScene(item->boundingRect());
+            qDebug()<<"      --->:map:"<< s;
+            qDebug()<<"      --->:window rect:"<< window()->geometry();
+            QRectF c;
+            c.setLeft(0.0);
+            c.setBottom(0.0);
+            c.setRight(window()->geometry().width());
+            c.setBottom(window()->geometry().height());
+            qDebug()<<"      --->:window rect:"<< c;
+            m_vRenderer->setDrawRect(c, s);
+        }
+    } else {
+        qDebug()<<"not found player";
+    }
 
     m_vRenderer->setViewportSize(wsize * window()->devicePixelRatio());
     m_vRenderer->setT(m_t);
@@ -285,7 +335,7 @@ void IcePlayer::sync()
 void IcePlayer::testpcm(){
     testTimer = std::make_shared<QTimer>();
     connect(testTimer.get(), &QTimer::timeout, this, &IcePlayer::testTimeout);
-    testTimer->start(19);
+    testTimer->start(18);
 }
 
 QFile g711File("/Users/liuye/Documents/p2p/build/src/mysiprtp/Debug/8000_1.mulaw");

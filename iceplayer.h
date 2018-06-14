@@ -17,6 +17,7 @@ public:
     void setT(qreal t) { m_t = t; }
     void setViewportSize(const QSize &size) { m_viewportSize = size; }
     void setWindow(QQuickWindow *window) { m_window = window; }
+    void setDrawRect(QRectF & s, QRectF &it);
 
     const int TextureYIndex = 0;
     const int TextureUIndex = 1;
@@ -31,6 +32,10 @@ private:
     QOpenGLShaderProgram *m_program;
     QQuickWindow *m_window;
     GLuint m_textures[3];
+    GLfloat xleft;
+    GLfloat xright;
+    GLfloat ytop;
+    GLfloat ybottom;
 };
 
 class AudioRender{
