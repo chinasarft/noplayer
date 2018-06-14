@@ -277,7 +277,7 @@ void IcePlayer::handleWindowChanged(QQuickWindow *win)
         connect(win, &QQuickWindow::sceneGraphInvalidated, this, &IcePlayer::cleanup, Qt::DirectConnection);
         // If we allow QML to do the clearing, they would clear what we paint
         // and nothing would show.
-        win->setClearBeforeRendering(true);
+        //win->setClearBeforeRendering(true);
     }
 }
 
