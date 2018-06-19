@@ -2,6 +2,8 @@ import QtQuick 2.9
 import QtQuick.Controls 2.2
 import QtQuick.Window 2.2
 import OpenGLUnderQML 1.0
+import QtQuick.Layouts 1.3
+import "qrc:/ui/"
 
 Window {
     visible: true
@@ -20,42 +22,87 @@ Window {
         }
     }
 
-    Text{
+
+    Rectangle{
         id: mytext
-        color: "#f2f5f5"
         anchors.top: player.bottom
-        text: "Please select the best mobile os:"
-    }
-
-    Button {
-        id: call
-        text: "call"
-        anchors.top: mytext.bottom
-        //onClicked: {
-        //    colorMaker.start()
-        //}
-    }
-
-    Button {
-        id: hangup
-        text: "hangup"
-        anchors.top: mytext.bottom
-        anchors.left: call.right
-        anchors.leftMargin: 5
-    }
-
-    TextInput {
-        anchors.top: call.bottom
-        anchors.left: parent.left
-        text: "abcde"
-        font.pointSize: 20
-        color: "blue"
-        focus: true
-
-        Component.onCompleted: {
-            console.log("xxxxxxxxxxxxxxfrom qml")
+        height: 32
+        width: 96
+        color: "#aaaaaa"
+        Text{
+            anchors.fill: parent
+            color: "#f2f5f5"
+            text: "contact"
+            font.pointSize: 20
+            anchors.horizontalCenter: parent.horizontalCenter
         }
     }
+
+    LineEdit {
+        id: lineEdit
+        anchors.top: player.bottom
+        anchors.left: mytext.right
+        //text: "placeholder"
+        input.font.pointSize: 20
+        input.color: "blue"
+        width: parent.width - mytext.width
+        input.height: 24
+
+        Component.onCompleted: {
+            console.log("xxxxxxxxxxxxxxLineEdit", width, parent.width, mytext.width)
+        }
+    }
+
+
+    RowLayout{
+        anchors.top: mytext.bottom
+        width: parent.width
+        height: 60
+        spacing: 6
+
+
+        Button {
+            id: call
+            Layout.fillWidth: true
+            text: "call"
+
+            onClicked: {
+                call.color = "red"
+                console.log(call.color)
+            }
+
+            background: Rectangle {
+                implicitWidth: 100
+                implicitHeight: 40
+                color: call.down ? "#66ff53" : "#00ff00"
+                border.color: "gray"
+                border.width: 2
+                radius: 4
+            }
+        }
+
+
+        Button {
+            id: hangup
+            Layout.fillWidth: true
+            text: "hangup"
+
+            onClicked: {
+                call.color = "red"
+                console.log(call.color)
+            }
+
+            background: Rectangle {
+                implicitWidth: 100
+                implicitHeight: 40
+                color: hangup.down ? "#ff4411" : "#ff0000"
+                border.color: "gray"
+                border.width: 2
+                radius: 4
+            }
+        }
+    }
+
 
     Component.onCompleted: {
         console.log("yyyyyyyyyyyfrom qml")
