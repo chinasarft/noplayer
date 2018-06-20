@@ -6,6 +6,7 @@
 #include <QtGui/QOpenGLFunctions>
 #include <QtMultimedia>
 #include <memory>
+#include <input.hpp>
 
 class QGLRenderer : public QObject, protected QOpenGLFunctions
 {
@@ -68,19 +69,27 @@ public:
 
 signals:
     void tChanged();
+    void pictureReady();
 
 public slots:
     void sync();
     void cleanup();
     void testTimeout();
+    void Stop();
 
 private slots:
     void handleWindowChanged(QQuickWindow *win);
 
 private:
+    static void getFrameCallback(void * userData, const std::shared_ptr<MediaFrame> & frame);
+
+private:
     qreal m_t;
     QGLRenderer *m_vRenderer;
     AudioRender m_aRenderer;
+
+    std::shared_ptr<Input> m_stream1;
+    std::shared_ptr<Input> m_stream2;
 };
 
 #endif // ICEPLAYER_H

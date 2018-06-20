@@ -19,6 +19,7 @@ Window {
         height: parent.height / 5 * 2
         width: parent.width
         IcePlayer {
+            id: icePlayer
         }
     }
 
@@ -103,6 +104,12 @@ Window {
         }
     }
 
+
+    onClosing: {
+        console.log("closesssssssssssss")
+        icePlayer.Stop()
+        Qt.quit()
+    }
 
     Component.onCompleted: {
         console.log("yyyyyyyyyyyfrom qml")

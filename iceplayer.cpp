@@ -10,22 +10,28 @@
 
 #define VW 480
 #define VH 288
+uint8_t gData[VW*VH*2];
 typedef struct YuvData{
-    char* pos[3];
-    char data[VW*VH*2];
+    uint8_t* pos[3];
+    int linesize[3];
     int frameLen;
     int w;
     int h;
     YuvData(){
-        pos[0] =  data;
-        pos[1] = data + VW*VH;
+        pos[0] =  gData;
+        pos[1] = pos[0] + VW*VH;
         pos[2] = pos[1] + VW*VH/4;
         frameLen = VW * VH * 3 / 2;
         w = VW;
         h = VH;
+        linesize[0] = 480;
+        linesize[1] = 240;
+        linesize[2] = 240;
     }
 }YuvData;
 YuvData yuvData;
+
+
 
 QGLRenderer::~QGLRenderer()
 {
@@ -144,7 +150,12 @@ void QGLRenderer::paint()
         int location = m_program->uniformLocation(name);;
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, m_textures[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, yuvData.w/j,
+        glPixelStorei(GL_UNPACK_ROW_LENGTH,
+                      //yuvData.w/j);
+                      yuvData.linesize[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE,
+                     yuvData.w/j,
+                     //yuvData.linesize[i],
                      yuvData.h/j, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, yuvData.pos[i]);
         glUniform1i(location, i);
     }
@@ -249,14 +260,22 @@ IcePlayer::IcePlayer()
     {
         qDebug()<<"Can't open the file!";
     } else {
-        printf("frameLen:%d  base dataAddr:%p\n", yuvData.frameLen, &yuvData.data);
+        printf("frameLen:%d  base dataAddr:%p\n", yuvData.frameLen, gData);
         printf("pos0=%p pos1=%p pos2=%p\n", yuvData.pos[0], yuvData.pos[1], yuvData.pos[2]);
         printf("pos2-pos1=%p, pos1-pos0=%p\n", yuvData.pos[2] - yuvData.pos[1], yuvData.pos[1] - yuvData.pos[0]);
-        file.read(yuvData.data, yuvData.frameLen);
+        qDebug()<<"yuv:"<<yuvData.linesize[0]<<" "<<yuvData.linesize[1]<<" "<<yuvData.linesize[2] << " "<<yuvData.h;
+        file.read((char *)gData, yuvData.frameLen);
         file.close();
     }
 
-    testpcm();
+    InputParam param;
+    param.userData_ = this;
+    param.name_ = "test";
+    //param.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
+    param.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
+    param.getFrameCb_ = IcePlayer::getFrameCallback;
+    m_stream1 = std::make_shared<Input>(param);
+    //testpcm();
 }
 
 
@@ -294,6 +313,8 @@ void IcePlayer::sync()
     if (!m_vRenderer) {
         m_vRenderer = new QGLRenderer();
         connect(window(), &QQuickWindow::afterRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
+        connect(this, &IcePlayer::pictureReady, m_vRenderer, &QGLRenderer::paint, Qt::QueuedConnection);
+        m_stream1->Start();
     }
     //m_renderer->setViewportSize(window()->size() * window()->devicePixelRatio());
     QSize wsize = window()->size();
@@ -352,5 +373,39 @@ void IcePlayer::testTimeout(){
             qDebug()<<"g711file reset";
             g711File.reset();
         }
+    }
+}
+
+void IcePlayer::Stop() {
+    qDebug()<<"iceplayer stop";
+    if (m_stream1.get() != nullptr){
+        m_stream1->Stop();
+    }
+    if (m_stream2.get() != nullptr){
+        m_stream2->Stop();
+    }
+    qDebug()<<"iceplayer stoped";
+}
+
+void IcePlayer::getFrameCallback(void * userData, const std::shared_ptr<MediaFrame> & frame) {
+    IcePlayer * player = (IcePlayer *)(userData);
+
+    if(frame->GetStreamType() == STREAM_AUDIO)
+        qDebug()<<"audio framepts:"<<frame->pts;
+    else
+        qDebug()<<"video framepts:"<<frame->pts;
+    AVFrame * f = frame->AvFrame();
+    if (f->format == AV_PIX_FMT_YUV420P){
+        yuvData.pos[0] = f->data[0];
+        yuvData.pos[1] = f->data[1];
+        yuvData.pos[2] = f->data[2];
+        yuvData.linesize[0] = f->linesize[0];
+        yuvData.linesize[1] = f->linesize[1];
+        yuvData.linesize[2] = f->linesize[2];
+
+        qDebug()<<"yuv:"<<f->linesize[0]<<" "<<f->linesize[1]<<" "<<f->linesize[2] << " "<<yuvData.h;
+        emit player->pictureReady();
+        //emit player->afterRendering;
+        //player->m_vRenderer->paint();
     }
 }
