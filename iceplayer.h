@@ -79,6 +79,7 @@ public slots:
     void sync();
     void cleanup();
     void Stop();
+    void repaint();
 
 private slots:
     void handleWindowChanged(QQuickWindow *win);

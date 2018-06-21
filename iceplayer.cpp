@@ -84,7 +84,6 @@ void QGLRenderer::setDrawRect(QRectF & s, QRectF &it){
     xright = (it.right() - s.left() - sw) / sw;
     ytop = (s.bottom() - it.top() - sh) / sh;
     ybottom = (s.bottom() - it.bottom() - sh) / sh;
-
 #if 0
     logdebug("\n{} {}\n{} {}\n{} {}\n {} {}\{} {}\n{} {}",
             xleft, ybottom ,
@@ -99,9 +98,6 @@ void QGLRenderer::setDrawRect(QRectF & s, QRectF &it){
 
 void QGLRenderer::paint()
 {
-    m_program->bind();
-    m_program->enableAttributeArray(0);
-
     float values[] = {
         //left top triangle
         xleft, ybottom, 0.0f,     0.0f, 1.0f,
@@ -114,11 +110,15 @@ void QGLRenderer::paint()
     };
 
     std::lock_guard<std::mutex> lock(m_frameMutex);
-    AVFrame * f = m_frame->AvFrame();
+    AVFrame * f = nullptr;
+    if (m_frame.get() != nullptr)
+        f = m_frame->AvFrame();
 
     if (f != nullptr) {
+        m_program->bind();
+        m_program->enableAttributeArray(0);
         m_program->enableAttributeArray(1);
-        //m_program->setAttributeArray(0, GL_FLOAT, values, 2);
+
         m_program->setAttributeArray(0, GL_FLOAT, values, 3, 5 * sizeof(GLfloat));
         m_program->setAttributeArray(1, GL_FLOAT, &values[3], 2, 5 * sizeof(GLfloat));
 
@@ -144,8 +144,9 @@ void QGLRenderer::paint()
         glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
         glDisable(GL_DEPTH_TEST);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+        m_program->disableAttributeArray(0);
         m_program->disableAttributeArray(1);
-        glSwapAPPLE();
+        //glSwapAPPLE();
     } else {
         glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
         glDisable(GL_DEPTH_TEST);
@@ -156,12 +157,10 @@ void QGLRenderer::paint()
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     }
-    m_program->disableAttributeArray(0);
     m_program->release();
-
     // Not strictly needed for this example, but generally useful for when
     // mixing with raw OpenGL.
-    m_window->resetOpenGLState();
+    //m_window->resetOpenGLState();
 }
 
 AudioRender::AudioRender(){
@@ -223,8 +222,8 @@ IcePlayer::IcePlayer()
     InputParam param;
     param.userData_ = this;
     param.name_ = "test";
-    //param.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
-    param.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
+    param.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
+    //param.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
     param.getFrameCb_ = IcePlayer::getFrameCallback;
     m_stream1 = std::make_shared<Input>(param);
 }
@@ -259,12 +258,21 @@ void IcePlayer::cleanup()
     }
 }
 
+void IcePlayer::repaint()
+{
+    if (m_vRenderer) {
+        m_vRenderer->paint();
+        if (window())
+            window()->update();
+    }
+}
+
 void IcePlayer::sync()
 {
     if (!m_vRenderer) {
         m_vRenderer = new QGLRenderer();
         connect(window(), &QQuickWindow::afterRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
-        connect(this, &IcePlayer::pictureReady, m_vRenderer, &QGLRenderer::paint, Qt::QueuedConnection);
+        connect(this, &IcePlayer::pictureReady, this, &IcePlayer::repaint, Qt::QueuedConnection);
         //this->setParent(window());
         m_stream1->Start();
     }
@@ -374,7 +382,6 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
     } else {
         logdebug("video framepts:{}", frame->pts);
         player->m_vRenderer->SetFrame(frame);
-        //emit player->m_vRenderer->m_window->afterRendering();
         emit player->pictureReady();
     }
 }
