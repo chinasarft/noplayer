@@ -84,15 +84,14 @@ void QGLRenderer::setDrawRect(QRectF & s, QRectF &it){
     xright = (it.right() - s.left() - sw) / sw;
     ytop = (s.bottom() - it.top() - sh) / sh;
     ybottom = (s.bottom() - it.bottom() - sh) / sh;
-#if 0
-    logdebug("\n{} {}\n{} {}\n{} {}\n {} {}\{} {}\n{} {}",
+
+    logtrace("\n{} {}\n{} {}\n{} {}\n {} {}\{} {}\n{} {}",
             xleft, ybottom ,
             xright ,ytop,
             xleft , ytop,
             xleft , ybottom,
             xright ,ybottom,
             xright ,ytop);
-#endif
 }
 
 
@@ -282,26 +281,41 @@ void IcePlayer::sync()
 
     QObject * obj = window()->findChild<QObject *>("player");
     if(obj != nullptr){
+#ifdef MORE_DETAILS
         QVariant h = obj->property("height");
         QVariant w = obj->property("width");
-        qDebug()<<"height:"<<h.type()<<h.toDouble();
-        qDebug()<<"width:"<<w.type()<<w.toDouble();
+        logtrace("name:height type:{} value:{}", h.type().toString().toStdString(), h.toDouble());
+        logtrace("name:width: type:{} value:{}", w.type().toString().toStdString(), w.toDouble());
         QVariant n = obj->property("objectName");
-        qDebug()<<"name:"<<n.type()<<n.toString();
+        logtrace("name:objectName type:{} value:{}", n.type().toString().toStdString(),
+                 n.toString().toStdString());
         obj->dumpObjectInfo();
+#endif
 
         QQuickItem * item = dynamic_cast<QQuickItem *>(obj);
         if (item != nullptr){
-            qDebug()<<"      --->:boundingRect:"<<item->boundingRect();
+            QRectF rect = item->boundingRect();
+            //qDebug()<<"      --->:boundingRect:"<<item->rect();
+            logtrace("playerRect's boundingRect:({} {} {} {})",
+                     rect.left(), rect.top(), rect.right(), rect.bottom());
             QRectF s = item->mapRectToScene(item->boundingRect());
-            qDebug()<<"      --->:map:"<< s;
-            qDebug()<<"      --->:window rect:"<< window()->geometry();
+            //qDebug()<<"      --->:map:"<< s;
+            logtrace("playerRect's mapRectToScene:({} {} {} {})",
+                     s.left(), s.top(), s.right(), s.bottom());
+
+            QRect wrect = window()->geometry();
+            //qDebug()<<"      --->:window rect:"<< wrect;
+            logtrace("window geometry:({} {} {} {})",
+                wrect.left(), wrect.top(), wrect.right(), wrect.bottom());
+
             QRectF c;
             c.setLeft(0.0);
             c.setBottom(0.0);
             c.setRight(window()->geometry().width());
             c.setBottom(window()->geometry().height());
-            qDebug()<<"      --->:window rect:"<< c;
+            //qDebug()<<"      --->:window rect:"<< c;
+            logtrace("window geometry:({} {} {} {})",
+                c.left(), c.top(), c.right(), c.bottom());
             m_vRenderer->setDrawRect(c, s);
         }
     } else {
@@ -333,6 +347,7 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
     if(frame->GetStreamType() == STREAM_AUDIO) {
         logdebug("audio framepts:{}", frame->pts);
         if (!player->m_aRenderer.IsInited()) {
+            bool configOk = true;
             QAudioFormat config;
             config.setSampleRate(f->sample_rate);
             config.setChannelCount(f->channels);
@@ -369,14 +384,15 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
             case AV_SAMPLE_FMT_DBLP:
             case AV_SAMPLE_FMT_S64:
             case AV_SAMPLE_FMT_S64P:
+                configOk = false;
                 logerror("not soupport:{}", f->format);
                 break;
             }
-            player->m_aRenderer.Init(config);
+            if(configOk)
+                player->m_aRenderer.Init(config);
         }
 
         if (player->m_aRenderer.IsInited()) {
-            qDebug()<<"linesize:"<<f->linesize[0]<< " "<<f->linesize[1];
             player->m_aRenderer.PushData(f->data[0], f->linesize[0]);
         }
     } else {

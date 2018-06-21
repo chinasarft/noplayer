@@ -13,6 +13,7 @@ int main(int argc, char *argv[])
 
     logger_init_file_output("player.log");
     logger_set_level_debug();
+    //logger_set_level_trace();
 
     QQmlApplicationEngine engine;
     engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
