@@ -11,6 +11,7 @@
 class QGLRenderer : public QObject, protected QOpenGLFunctions
 {
     Q_OBJECT
+    friend class IcePlayer;
 public:
     QGLRenderer();
     ~QGLRenderer();
@@ -23,6 +24,7 @@ public:
     const int TextureYIndex = 0;
     const int TextureUIndex = 1;
     const int TextureVIndex = 2;
+    void SetFrame(std::shared_ptr<MediaFrame> &frame);
 
 public slots:
     void paint();
@@ -37,6 +39,9 @@ private:
     GLfloat xright;
     GLfloat ytop;
     GLfloat ybottom;
+
+    std::mutex m_frameMutex;
+    std::shared_ptr<MediaFrame> m_frame;
 };
 
 class AudioRender{
@@ -46,10 +51,12 @@ public:
     AudioRender();
     void PushData(void *pcmData,int size);
     void PushG711Data(void *g711Data, int size, int lawType);
+    void Init(QAudioFormat config);
+    bool IsInited(){return m_inited;}
 private:
     QAudioFormat m_audioConfig;
     std::shared_ptr<QAudioOutput> m_audioOutput;
-    bool m_canPlay;
+    bool m_inited;
     QIODevice *m_device;
 };
 
@@ -64,9 +71,6 @@ public:
     qreal t() const { return m_t; }
     void setT(qreal t);
 
-    std::shared_ptr<QTimer> testTimer;
-    void testpcm();
-
 signals:
     void tChanged();
     void pictureReady();
@@ -74,14 +78,13 @@ signals:
 public slots:
     void sync();
     void cleanup();
-    void testTimeout();
     void Stop();
 
 private slots:
     void handleWindowChanged(QQuickWindow *win);
 
 private:
-    static void getFrameCallback(void * userData, const std::shared_ptr<MediaFrame> & frame);
+    static void getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame);
 
 private:
     qreal m_t;

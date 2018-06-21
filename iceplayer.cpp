@@ -4,34 +4,9 @@
 #include <QtGui/QOpenGLContext>
 #include <QtWidgets/QGraphicsView>
 #include <QtWidgets/QGraphicsScene>
-#include <QDebug>
 #include <QFile>
 #include "g711.h"
-
-#define VW 480
-#define VH 288
-uint8_t gData[VW*VH*2];
-typedef struct YuvData{
-    uint8_t* pos[3];
-    int linesize[3];
-    int frameLen;
-    int w;
-    int h;
-    YuvData(){
-        pos[0] =  gData;
-        pos[1] = pos[0] + VW*VH;
-        pos[2] = pos[1] + VW*VH/4;
-        frameLen = VW * VH * 3 / 2;
-        w = VW;
-        h = VH;
-        linesize[0] = 480;
-        linesize[1] = 240;
-        linesize[2] = 240;
-    }
-}YuvData;
-YuvData yuvData;
-
-
+#define THIS_FILE "iceplayer.cpp"
 
 QGLRenderer::~QGLRenderer()
 {
@@ -95,6 +70,12 @@ QGLRenderer::QGLRenderer() : m_t(0), m_program(0) {
     }
 }
 
+void QGLRenderer::SetFrame(std::shared_ptr<MediaFrame> &frame)
+{
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+    m_frame = frame;
+}
+
 void QGLRenderer::setDrawRect(QRectF & s, QRectF &it){
     qreal sw = (s.right() - s.left())/2;
     qreal sh = (s.bottom() - s.top())/2;
@@ -104,12 +85,15 @@ void QGLRenderer::setDrawRect(QRectF & s, QRectF &it){
     ytop = (s.bottom() - it.top() - sh) / sh;
     ybottom = (s.bottom() - it.bottom() - sh) / sh;
 
-    qDebug() <<xleft << "  " <<ybottom << "\n"
-            <<xright << "  " <<ytop<< "\n"
-           <<xleft << "  " << ytop<< "\n"
-          <<xleft << "  " << ybottom<< "\n"
-         <<xright << "  " <<ybottom<< "\n"
-        <<xright << "  " <<ytop<< "\n";
+#if 0
+    logdebug("\n{} {}\n{} {}\n{} {}\n {} {}\{} {}\n{} {}",
+            xleft, ybottom ,
+            xright ,ytop,
+            xleft , ytop,
+            xleft , ybottom,
+            xright ,ybottom,
+            xright ,ytop);
+#endif
 }
 
 
@@ -117,8 +101,7 @@ void QGLRenderer::paint()
 {
     m_program->bind();
     m_program->enableAttributeArray(0);
-#if 1
-    m_program->enableAttributeArray(1);
+
     float values[] = {
         //left top triangle
         xleft, ybottom, 0.0f,     0.0f, 1.0f,
@@ -128,69 +111,51 @@ void QGLRenderer::paint()
         xleft, ybottom, 0.0f,     0.0f, 1.0f,
         xright, ybottom, 0.0f,      1.0f, 1.0f,
         xright, ytop, 0.0f,       1.0f, 0.0f,
-    #if 0
-        //left down triangle
-        1.0f, -1.0f, 0.0f,       1.0f, 1.0f,
-        -1.0f, 1.0f, 0.0f,       0.0f, 0.0f,
-        -1.0f, -1.0f, 0.0f,      0.0f, 1.0f,
-        //right top triangle
-        1.0f, -1.0f, 0.0f,     1.0f, 1.0f,
-        1.0f, 1.0f, 0.0f,       1.0f, 0.0f,
-        -1.0f, 1.0f, 0.0f,      0.0f, 0.0f,
-    #endif
     };
 
-    //m_program->setAttributeArray(0, GL_FLOAT, values, 2);
-    m_program->setAttributeArray(0, GL_FLOAT, values, 3, 5 * sizeof(GLfloat));
-    m_program->setAttributeArray(1, GL_FLOAT, &values[3], 2, 5 * sizeof(GLfloat));
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+    AVFrame * f = m_frame->AvFrame();
 
-    for (int i = 0, j = 1; i < 3; i++, j = 2) {
-        char name[5] = {0};
-        sprintf(name, "tex%d", i);
-        int location = m_program->uniformLocation(name);;
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, m_textures[i]);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH,
-                      //yuvData.w/j);
-                      yuvData.linesize[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE,
-                     yuvData.w/j,
-                     //yuvData.linesize[i],
-                     yuvData.h/j, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, yuvData.pos[i]);
-        glUniform1i(location, i);
+    if (f != nullptr) {
+        m_program->enableAttributeArray(1);
+        //m_program->setAttributeArray(0, GL_FLOAT, values, 2);
+        m_program->setAttributeArray(0, GL_FLOAT, values, 3, 5 * sizeof(GLfloat));
+        m_program->setAttributeArray(1, GL_FLOAT, &values[3], 2, 5 * sizeof(GLfloat));
+
+        for (int i = 0, j = 1; i < 3; i++, j = 2) {
+            char name[5] = {0};
+            sprintf(name, "tex%d", i);
+            int location = m_program->uniformLocation(name);;
+            glActiveTexture(GL_TEXTURE0 + i);
+            glBindTexture(GL_TEXTURE_2D, m_textures[i]);
+
+            glPixelStorei(GL_UNPACK_ROW_LENGTH,
+                          f->linesize[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE,
+                         f->width/j,
+                         f->height/j, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, f->data[i]);
+            glUniform1i(location, i);
+        }
+
+        int colorLocation = m_program->uniformLocation("color");
+        QColor color(255, 0, 0, 100);
+        m_program->setUniformValue(colorLocation, color);
+
+        glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
+        glDisable(GL_DEPTH_TEST);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        m_program->disableAttributeArray(1);
+        glSwapAPPLE();
+    } else {
+        glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
+        glDisable(GL_DEPTH_TEST);
+
+        glClearColor(0, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     }
-
-    int colorLocation = m_program->uniformLocation("color");
-    QColor color(255, 0, 0, 100);
-    m_program->setUniformValue(colorLocation, color);
-
-    glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
-    glDisable(GL_DEPTH_TEST);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-
-#else
-    float values[] = {
-            -1, -1,
-            1, -1,
-            -1, 1,
-            1, 1
-    };
-    m_program->setAttributeArray(0, GL_FLOAT, values, 2);
-    m_program->setUniformValue("t", (float) m_t);
-
-    glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
-
-    glDisable(GL_DEPTH_TEST);
-
-    glClearColor(0, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-#endif
     m_program->disableAttributeArray(0);
     m_program->release();
 
@@ -200,35 +165,34 @@ void QGLRenderer::paint()
 }
 
 AudioRender::AudioRender(){
-    m_audioConfig.setSampleRate(8000);
-    m_audioConfig.setChannelCount(1);
-    m_audioConfig.setSampleSize(16);
-    m_audioConfig.setCodec("audio/pcm");
-    m_audioConfig.setByteOrder(QAudioFormat::LittleEndian);
-    m_audioConfig.setSampleType(QAudioFormat::SignedInt);
-    m_canPlay = false;
+
+}
+
+void AudioRender::Init(QAudioFormat config){
+    m_audioConfig = config;
+    m_inited = false;
     QAudioDeviceInfo info = QAudioDeviceInfo::defaultOutputDevice();
     if (!info.isFormatSupported(m_audioConfig)) {
-        qDebug()<<"default format not supported try to use nearest";
+        logerror("default format not supported try to use nearest");
         m_audioConfig = info.nearestFormat(m_audioConfig);
         return;
     }
-    m_canPlay = true;
+    m_inited = true;
     m_audioOutput = std::make_shared<QAudioOutput>(m_audioConfig);
     m_device = m_audioOutput->start();
     m_audioOutput->setVolume(0.8);
-    qDebug()<<"volume:"<<m_audioOutput->volume();
+    loginfo("init volume:{}", m_audioOutput->volume());
 }
 
 void AudioRender::PushData(void *pcmData,int size){
-    if(m_canPlay == false)
+    if(m_inited == false)
         return;
 
     m_device->write((const char *)pcmData, size);
 }
 
 void AudioRender::PushG711Data(void *g711Data, int size, int lawType){
-    if(m_canPlay == false)
+    if(m_inited == false)
         return;
     short pcm[1280];
     unsigned char *src = (unsigned char*)g711Data;
@@ -254,19 +218,7 @@ IcePlayer::IcePlayer()
 {
     connect(this, &QQuickItem::windowChanged, this, &IcePlayer::handleWindowChanged);
 
-    qDebug()<<QDir::currentPath();
-    QFile file("/Users/liuye/Documents/qml/iceplayer/hks_480_288.yuv");
-    if(!file.open(QIODevice::ReadOnly))
-    {
-        qDebug()<<"Can't open the file!";
-    } else {
-        printf("frameLen:%d  base dataAddr:%p\n", yuvData.frameLen, gData);
-        printf("pos0=%p pos1=%p pos2=%p\n", yuvData.pos[0], yuvData.pos[1], yuvData.pos[2]);
-        printf("pos2-pos1=%p, pos1-pos0=%p\n", yuvData.pos[2] - yuvData.pos[1], yuvData.pos[1] - yuvData.pos[0]);
-        qDebug()<<"yuv:"<<yuvData.linesize[0]<<" "<<yuvData.linesize[1]<<" "<<yuvData.linesize[2] << " "<<yuvData.h;
-        file.read((char *)gData, yuvData.frameLen);
-        file.close();
-    }
+    loginfo("pwd:{}", QDir::currentPath().toStdString());
 
     InputParam param;
     param.userData_ = this;
@@ -275,7 +227,6 @@ IcePlayer::IcePlayer()
     param.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
     param.getFrameCb_ = IcePlayer::getFrameCallback;
     m_stream1 = std::make_shared<Input>(param);
-    //testpcm();
 }
 
 
@@ -314,11 +265,12 @@ void IcePlayer::sync()
         m_vRenderer = new QGLRenderer();
         connect(window(), &QQuickWindow::afterRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
         connect(this, &IcePlayer::pictureReady, m_vRenderer, &QGLRenderer::paint, Qt::QueuedConnection);
+        //this->setParent(window());
         m_stream1->Start();
     }
     //m_renderer->setViewportSize(window()->size() * window()->devicePixelRatio());
     QSize wsize = window()->size();
-    qDebug()<<wsize;
+    logdebug("window size: width:{} height:{}", wsize.width(), wsize.height());
 
     QObject * obj = window()->findChild<QObject *>("player");
     if(obj != nullptr){
@@ -345,35 +297,12 @@ void IcePlayer::sync()
             m_vRenderer->setDrawRect(c, s);
         }
     } else {
-        qDebug()<<"not found player";
+        logerror("not found player");
     }
 
     m_vRenderer->setViewportSize(wsize * window()->devicePixelRatio());
     m_vRenderer->setT(m_t);
     m_vRenderer->setWindow(window());
-}
-
-void IcePlayer::testpcm(){
-    testTimer = std::make_shared<QTimer>();
-    connect(testTimer.get(), &QTimer::timeout, this, &IcePlayer::testTimeout);
-    testTimer->start(18);
-}
-
-QFile g711File("/Users/liuye/Documents/p2p/build/src/mysiprtp/Debug/8000_1.mulaw");
-void IcePlayer::testTimeout(){
-    if (!g711File.isOpen()) {
-        g711File.open(QIODevice::ReadOnly);
-    }
-    if (g711File.isOpen()) {
-        char data[160];
-        auto rLen = g711File.read(data, 160);
-        if (rLen == 160) {
-            m_aRenderer.PushG711Data(data, 160, AudioRender::ulawType);
-        } else {
-            qDebug()<<"g711file reset";
-            g711File.reset();
-        }
-    }
 }
 
 void IcePlayer::Stop() {
@@ -384,28 +313,68 @@ void IcePlayer::Stop() {
     if (m_stream2.get() != nullptr){
         m_stream2->Stop();
     }
+    logger_flush();
     qDebug()<<"iceplayer stoped";
 }
 
-void IcePlayer::getFrameCallback(void * userData, const std::shared_ptr<MediaFrame> & frame) {
+void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame) {
     IcePlayer * player = (IcePlayer *)(userData);
 
-    if(frame->GetStreamType() == STREAM_AUDIO)
-        qDebug()<<"audio framepts:"<<frame->pts;
-    else
-        qDebug()<<"video framepts:"<<frame->pts;
+    AVSampleFormat;
     AVFrame * f = frame->AvFrame();
-    if (f->format == AV_PIX_FMT_YUV420P){
-        yuvData.pos[0] = f->data[0];
-        yuvData.pos[1] = f->data[1];
-        yuvData.pos[2] = f->data[2];
-        yuvData.linesize[0] = f->linesize[0];
-        yuvData.linesize[1] = f->linesize[1];
-        yuvData.linesize[2] = f->linesize[2];
+    if(frame->GetStreamType() == STREAM_AUDIO) {
+        logdebug("audio framepts:{}", frame->pts);
+        if (!player->m_aRenderer.IsInited()) {
+            QAudioFormat config;
+            config.setSampleRate(f->sample_rate);
+            config.setChannelCount(f->channels);
+            config.setCodec("audio/pcm");
+            config.setByteOrder(QAudioFormat::LittleEndian);
 
-        qDebug()<<"yuv:"<<f->linesize[0]<<" "<<f->linesize[1]<<" "<<f->linesize[2] << " "<<yuvData.h;
+            switch(f->format) {
+            case AV_SAMPLE_FMT_U8:
+                qDebug()<<"AV_SAMPLE_FMT_U8";
+                config.setSampleSize(8);
+                config.setSampleType(QAudioFormat::UnSignedInt);
+                break;
+            case AV_SAMPLE_FMT_S16:
+                qDebug()<<"AV_SAMPLE_FMT_S16";
+                config.setSampleSize(16);
+                config.setSampleType(QAudioFormat::SignedInt);
+                break;
+            case AV_SAMPLE_FMT_S32:
+                qDebug()<<"AV_SAMPLE_FMT_S32";
+                config.setSampleSize(32);
+                config.setSampleType(QAudioFormat::SignedInt);
+                break;
+            case AV_SAMPLE_FMT_FLT:
+                qDebug()<<"AV_SAMPLE_FMT_FLT";
+                config.setSampleSize(32);
+                config.setSampleType(QAudioFormat::Float);
+                break;
+
+            case AV_SAMPLE_FMT_U8P:
+            case AV_SAMPLE_FMT_S16P:
+            case AV_SAMPLE_FMT_S32P:
+            case AV_SAMPLE_FMT_FLTP:
+            case AV_SAMPLE_FMT_DBL:
+            case AV_SAMPLE_FMT_DBLP:
+            case AV_SAMPLE_FMT_S64:
+            case AV_SAMPLE_FMT_S64P:
+                logerror("not soupport:{}", f->format);
+                break;
+            }
+            player->m_aRenderer.Init(config);
+        }
+
+        if (player->m_aRenderer.IsInited()) {
+            qDebug()<<"linesize:"<<f->linesize[0]<< " "<<f->linesize[1];
+            player->m_aRenderer.PushData(f->data[0], f->linesize[0]);
+        }
+    } else {
+        logdebug("video framepts:{}", frame->pts);
+        player->m_vRenderer->SetFrame(frame);
+        //emit player->m_vRenderer->m_window->afterRendering();
         emit player->pictureReady();
-        //emit player->afterRendering;
-        //player->m_vRenderer->paint();
     }
 }
