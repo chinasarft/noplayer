@@ -16,7 +16,6 @@ public:
     QGLRenderer();
     ~QGLRenderer();
 
-    void setT(qreal t) { m_t = t; }
     void setViewportSize(const QSize &size) { m_viewportSize = size; }
     void setWindow(QQuickWindow *window) { m_window = window; }
     void setDrawRect(QRectF & s, QRectF &it);
@@ -31,7 +30,6 @@ public slots:
 
 private:
     QSize m_viewportSize;
-    qreal m_t;
     QOpenGLShaderProgram *m_program;
     QQuickWindow *m_window;
     GLuint m_textures[3];
@@ -63,13 +61,9 @@ private:
 class IcePlayer : public QQuickItem
 {
     Q_OBJECT
-    Q_PROPERTY(qreal t READ t WRITE setT NOTIFY tChanged)
 
 public:
     explicit IcePlayer();
-
-    qreal t() const { return m_t; }
-    void setT(qreal t);
 
 signals:
     void tChanged();

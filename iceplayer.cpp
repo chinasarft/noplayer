@@ -13,7 +13,7 @@ QGLRenderer::~QGLRenderer()
     delete m_program;
 }
 
-QGLRenderer::QGLRenderer() : m_t(0), m_program(0) {
+QGLRenderer::QGLRenderer() : m_program(0) {
     m_textures[0] = 0;
     m_textures[1] = 0;
     m_textures[2] = 0;
@@ -136,30 +136,26 @@ void QGLRenderer::paint()
             glUniform1i(location, i);
         }
 
-        int colorLocation = m_program->uniformLocation("color");
-        QColor color(255, 0, 0, 100);
-        m_program->setUniformValue(colorLocation, color);
-
         glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
-        glDisable(GL_DEPTH_TEST);
+
+        //glDisable(GL_DEPTH_TEST);
+        //glClearColor(0, 0, 0, 1);
+        //glClear(GL_COLOR_BUFFER_BIT);
+
+        //glEnable(GL_BLEND);
+        //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+
         glDrawArrays(GL_TRIANGLES, 0, 6);
         m_program->disableAttributeArray(0);
         m_program->disableAttributeArray(1);
+        m_program->release();
+
+        // Not strictly needed for this example, but generally useful for when
+        // mixing with raw OpenGL.
+        //m_window->resetOpenGLState();
         //glSwapAPPLE();
-    } else {
-        glViewport(0, 0, m_viewportSize.width(), m_viewportSize.height());
-        glDisable(GL_DEPTH_TEST);
-
-        glClearColor(0, 0, 0, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     }
-    m_program->release();
-    // Not strictly needed for this example, but generally useful for when
-    // mixing with raw OpenGL.
-    //m_window->resetOpenGLState();
 }
 
 AudioRender::AudioRender(){
@@ -227,17 +223,6 @@ IcePlayer::IcePlayer()
     m_stream1 = std::make_shared<Input>(param);
 }
 
-
-void IcePlayer::setT(qreal t)
-{
-    if (t == m_t)
-        return;
-    m_t = t;
-    emit tChanged();
-    if (window())
-        window()->update();
-}
-
 void IcePlayer::handleWindowChanged(QQuickWindow *win)
 {
     if (win) {
@@ -245,7 +230,7 @@ void IcePlayer::handleWindowChanged(QQuickWindow *win)
         connect(win, &QQuickWindow::sceneGraphInvalidated, this, &IcePlayer::cleanup, Qt::DirectConnection);
         // If we allow QML to do the clearing, they would clear what we paint
         // and nothing would show.
-        //win->setClearBeforeRendering(true);
+        //win->setClearBeforeRendering(false);
     }
 }
 
@@ -260,7 +245,6 @@ void IcePlayer::cleanup()
 void IcePlayer::repaint()
 {
     if (m_vRenderer) {
-        m_vRenderer->paint();
         if (window())
             window()->update();
     }
@@ -272,10 +256,8 @@ void IcePlayer::sync()
         m_vRenderer = new QGLRenderer();
         connect(window(), &QQuickWindow::afterRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
         connect(this, &IcePlayer::pictureReady, this, &IcePlayer::repaint, Qt::QueuedConnection);
-        //this->setParent(window());
         m_stream1->Start();
     }
-    //m_renderer->setViewportSize(window()->size() * window()->devicePixelRatio());
     QSize wsize = window()->size();
     logdebug("window size: width:{} height:{}", wsize.width(), wsize.height());
 
@@ -323,7 +305,6 @@ void IcePlayer::sync()
     }
 
     m_vRenderer->setViewportSize(wsize * window()->devicePixelRatio());
-    m_vRenderer->setT(m_t);
     m_vRenderer->setWindow(window());
 }
 

@@ -68,8 +68,7 @@ Window {
             text: "call"
 
             onClicked: {
-                call.color = "red"
-                console.log(call.color)
+                console.log("call button pressed")
             }
 
             background: Rectangle {
@@ -89,8 +88,7 @@ Window {
             text: "hangup"
 
             onClicked: {
-                call.color = "red"
-                console.log(call.color)
+                console.log("hangup button pressed")
             }
 
             background: Rectangle {
