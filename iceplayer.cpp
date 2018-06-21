@@ -153,7 +153,7 @@ void QGLRenderer::paint()
 
         // Not strictly needed for this example, but generally useful for when
         // mixing with raw OpenGL.
-        //m_window->resetOpenGLState();
+        m_window->resetOpenGLState();
         //glSwapAPPLE();
     }
 }
