@@ -7,6 +7,7 @@
 #include <QtMultimedia>
 #include <memory>
 #include <input.hpp>
+#include "linking.h"
 
 class QGLRenderer : public QObject, protected QOpenGLFunctions
 {
@@ -24,6 +25,7 @@ public:
     const int TextureUIndex = 1;
     const int TextureVIndex = 2;
     void SetFrame(std::shared_ptr<MediaFrame> &frame);
+    void ClearFrame();
 
 public slots:
     void paint();
@@ -50,6 +52,7 @@ public:
     void PushData(void *pcmData,int size);
     void PushG711Data(void *g711Data, int size, int lawType);
     void Init(QAudioFormat config);
+    void Uninit();
     bool IsInited(){return m_inited;}
 private:
     QAudioFormat m_audioConfig;
@@ -83,6 +86,8 @@ private slots:
 
 private:
     static void getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame);
+    static int feedFrameCallbackAudio(void *, uint8_t *buf, int buf_size);
+    static int feedFrameCallbackVideo(void *, uint8_t *buf, int buf_size);
 
 private:
     qreal m_t;
@@ -91,6 +96,9 @@ private:
 
     std::shared_ptr<Input> m_stream1;
     std::shared_ptr<Input> m_stream2;
+
+    std::shared_ptr<linking> iceSource_;
+    std::shared_ptr<std::vector<uint8_t>> buffer_; //视频帧ffmpeg一次读取不完，所以需要记录下来下次读
 };
 
 #endif // ICEPLAYER_H

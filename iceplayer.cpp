@@ -9,30 +9,41 @@
 #define THIS_FILE "iceplayer.cpp"
 
 #define RTP_TEST
+#define SIP_P_TEST
 
 #ifdef RTP_TEST
 #include <QFile>
 
 QFile audioFile("/Users/liuye/Documents/qml/iceplayer/a.mulaw");
+static int audioFileReadSize = 0;
 int audioFeed(void *opaque, uint8_t *buf, int buf_size)
 {
     if(!audioFile.isOpen()) {
         audioFile.open(QIODevice::ReadOnly);
     }
     if(audioFile.isOpen()) {
-        return audioFile.read((char *)buf, buf_size);
+        int n = audioFile.read((char *)buf, buf_size);
+        if (n == 0)
+            return 0;
+        audioFileReadSize+=n;
+        return n;
     }
     return -1;
 }
 
 QFile videoFile("/Users/liuye/Documents/qml/iceplayer/v.h264");
+static int videoFileReadSize = 0;
 int videoFeed(void *opaque, uint8_t *buf, int buf_size)
 {
     if(!videoFile.isOpen()) {
         videoFile.open(QIODevice::ReadOnly);
     }
     if(videoFile.isOpen()) {
-        return videoFile.read((char *)buf, buf_size);
+        int n = videoFile.read((char *)buf, buf_size);
+        if (n == 0)
+            return 0;
+        videoFileReadSize+=n;
+        return n;
     }
     return -1;
 }
@@ -105,6 +116,12 @@ void QGLRenderer::SetFrame(std::shared_ptr<MediaFrame> &frame)
 {
     std::lock_guard<std::mutex> lock(m_frameMutex);
     m_frame = frame;
+}
+
+void QGLRenderer::ClearFrame()
+{
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+    m_frame.reset();
 }
 
 void QGLRenderer::setDrawRect(QRectF & s, QRectF &it){
@@ -209,6 +226,14 @@ void AudioRender::Init(QAudioFormat config){
     loginfo("init volume:{}", m_audioOutput->volume());
 }
 
+void AudioRender::Uninit(){
+   m_device->destroyed();
+   m_audioOutput->stop();
+   m_device = nullptr;
+   m_inited = false;
+
+}
+
 void AudioRender::PushData(void *pcmData,int size){
     if(m_inited == false)
         return;
@@ -242,7 +267,7 @@ IcePlayer::IcePlayer()
   , m_vRenderer(0)
 {
     connect(this, &QQuickItem::windowChanged, this, &IcePlayer::handleWindowChanged);
-
+    m_vRenderer = nullptr;
     loginfo("pwd:{}", QDir::currentPath().toStdString());
 }
 
@@ -280,39 +305,6 @@ void IcePlayer::sync()
         m_vRenderer = new QGLRenderer();
         connect(window(), &QQuickWindow::afterRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
         connect(this, &IcePlayer::pictureReady, this, &IcePlayer::repaint, Qt::QueuedConnection);
-#ifdef RTP_TEST
-        InputParam param1;
-        param1.userData_ = this;
-        param1.name_ = "video";
-        param1.feedDataCb_ = videoFeed;
-        //param1.feedCbOpaqueArg_
-        param1.formatHint_ = "h264";
-        param1.getFrameCb_ = IcePlayer::getFrameCallback;
-
-        InputParam param2;
-        param2.userData_ = this;
-        param2.name_ = "audio";
-        param2.feedDataCb_ = audioFeed;
-        param2.formatHint_ = "mulaw";
-        param2.getFrameCb_ = IcePlayer::getFrameCallback;
-        param2.audioOpts.push_back("ar");
-        param2.audioOpts.push_back("8000");
-
-        m_stream1 = std::make_shared<Input>(param1);
-        m_stream1->Start();
-
-        m_stream2 = std::make_shared<Input>(param2);
-        m_stream2->Start();
-#else
-        InputParam param1;
-        param1.userData_ = this;
-        param1.name_ = "test";
-        //param1.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
-        param1.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
-        param1.getFrameCb_ = IcePlayer::getFrameCallback;
-        m_stream1 = std::make_shared<Input>(param1);
-        m_stream1->Start();
-#endif
     }
     QSize wsize = window()->size();
     logdebug("window size: width:{} height:{}", wsize.width(), wsize.height());
@@ -365,21 +357,24 @@ void IcePlayer::sync()
 }
 
 void IcePlayer::Stop() {
+    logger_flush();
     qDebug()<<"iceplayer stop";
     if (m_stream1.get() != nullptr){
         m_stream1->Stop();
+        m_stream1.reset();
+        qDebug()<<"stream1 stop";
     }
     if (m_stream2.get() != nullptr){
         m_stream2->Stop();
+        m_stream2.reset();
+        qDebug()<<"stream2 stop";
     }
-    logger_flush();
-    qDebug()<<"iceplayer stoped";
+
 }
 
 void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame) {
     IcePlayer * player = (IcePlayer *)(userData);
 
-    AVSampleFormat;
     AVFrame * f = frame->AvFrame();
     if(frame->GetStreamType() == STREAM_AUDIO) {
         logdebug("audio framepts:{}", frame->pts);
@@ -430,6 +425,7 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
         }
 
         if (player->m_aRenderer.IsInited()) {
+            logdebug("playaudo: {}", f->linesize[0]);
             player->m_aRenderer.PushData(f->data[0], f->linesize[0]);
         }
     } else {
@@ -442,8 +438,138 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
 void IcePlayer::call(QVariant sipAccount){
     QString strSipAcc = sipAccount.toString();
     qDebug()<<strSipAcc;
+#ifdef SIP_RTP_TEST
+    if (iceSource_.get() == nullptr) {
+        iceSource_ = std::make_shared<linking>();
+        sleep(5);
+    }
+    qDebug()<<"call "<<strSipAcc;
+    iceSource_->call(strSipAcc.toStdString());
+
+    if (iceSource_->GetState() != CALL_STATUS_REGISTERED) {
+        logdebug("not start stream");
+        return;
+    }
+#endif
+
+#ifdef RTP_TEST
+        InputParam param1;
+        param1.userData_ = this;
+        param1.name_ = "video";
+        param1.feedCbOpaqueArg_ = this;
+        param1.formatHint_ = "h264";
+        param1.getFrameCb_ = IcePlayer::getFrameCallback;
+
+        InputParam param2;
+        param2.userData_ = this;
+        param2.name_ = "audio";
+
+        param2.formatHint_ = "mulaw";
+        param2.getFrameCb_ = IcePlayer::getFrameCallback;
+        param2.feedCbOpaqueArg_ = this;
+        param2.audioOpts.push_back("ar");
+        param2.audioOpts.push_back("8000");
+
+#ifdef SIP_RTP_TEST
+        param1.feedDataCb_ = feedFrameCallbackVideo;
+        param2.feedDataCb_ = feedFrameCallbackAudio;
+#else
+        param1.feedDataCb_ = videoFeed;
+        param2.feedDataCb_ = audioFeed;
+#endif
+
+        loginfo("start stream1 and stream2");
+        m_stream1 = std::make_shared<Input>(param1);
+        m_stream1->Start();
+
+        m_stream2 = std::make_shared<Input>(param2);
+        m_stream2->Start();
+#else
+        InputParam param1;
+        param1.userData_ = this;
+        param1.name_ = "test";
+        //param1.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
+        param1.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
+        param1.getFrameCb_ = IcePlayer::getFrameCallback;
+        m_stream1 = std::make_shared<Input>(param1);
+        m_stream1->Start();
+#endif
 }
 
 void IcePlayer::hangup(){
     qDebug()<<"hangup invoked";
+    Stop();
+    if(audioFile.isOpen()) {
+        audioFile.close();
+    }
+    if(videoFile.isOpen()) {
+        videoFile.close();
+    }
+#ifdef SIP_RTP_TEST
+    if (iceSource_.get() == nullptr) {
+        qDebug()<<"hangup call";
+        iceSource_->hangup();
+    }
+#endif
+    m_aRenderer.Uninit();
+    m_vRenderer->ClearFrame();
+    window()->update();
+}
+
+//audio
+int IcePlayer::feedFrameCallbackAudio(void *opaque, uint8_t *buf, int buf_size)
+{
+    IcePlayer *p = (IcePlayer*)opaque;
+    std::shared_ptr<std::vector<uint8_t>> audioData;
+    int times = 5;
+    while(times > 0) {
+        audioData = p->iceSource_->PopAudioData();
+        if (audioData.get() == nullptr) {
+            sleep(1);
+            times--;
+        } else {
+            memcpy(buf, audioData->data(), audioData->size());
+            return audioData->size();
+        }
+    }
+    return 0;
+}
+
+//video
+int IcePlayer::feedFrameCallbackVideo(void *opaque, uint8_t *buf, int buf_size)
+{
+    IcePlayer *p = (IcePlayer*)opaque;
+    int times = 5;
+    while(true) {
+        if (times == 0)
+            return 0;
+        if (p->buffer_.get() != nullptr) {
+            auto storeSize = p->buffer_->size();
+            if (storeSize > 0) {
+                if (buf_size >= storeSize) {
+                    std::copy(p->buffer_->begin(), p->buffer_->end(), buf);
+                    p->buffer_->resize(0);
+                    return storeSize;
+                } else {
+                    std::copy(p->buffer_->begin(), p->buffer_->begin() + buf_size, buf);
+                    std::copy(p->buffer_->begin() + buf_size, p->buffer_->end(), p->buffer_->begin());
+                    p->buffer_->resize(storeSize - buf_size);
+                    return buf_size;
+                }
+            }
+        }
+
+        std::shared_ptr<std::vector<uint8_t>> videoData;
+        while(times > 0) {
+            videoData = p->iceSource_->PopVideoData();
+            if (videoData.get() == nullptr) {
+                sleep(1);
+                times--;
+            } else {
+                p->buffer_ = videoData;
+                break;
+            }
+        }
+    }
+    return 0;
 }

@@ -1,6 +1,13 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include "iceplayer.h"
+#define THIS_FILE "qmlmain.cpp"
+
+static Media mediaConfig[2] = {
+    {STREAM_AUDIO, CODEC_G711U, 8000 ,1},
+    {STREAM_VIDEO, CODEC_H264, 90000, 0}
+};
+static int mediaLength = 2;
 
 int main(int argc, char *argv[])
 {
@@ -15,11 +22,17 @@ int main(int argc, char *argv[])
     logger_set_level_debug();
     //logger_set_level_trace();
 
+    ErrorID err = InitSDK(mediaConfig, mediaLength);
+    if (err != RET_OK) {
+        logerror("InitSDK fail:{}", err);
+        return (int)err;
+    }
+
     QQmlApplicationEngine engine;
     engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
     if (engine.rootObjects().isEmpty())
         return -1;
 
     return app.exec();
-
+    UninitSDK();
 }
