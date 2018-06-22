@@ -438,3 +438,12 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
         emit player->pictureReady();
     }
 }
+
+void IcePlayer::call(QVariant sipAccount){
+    QString strSipAcc = sipAccount.toString();
+    qDebug()<<strSipAcc;
+}
+
+void IcePlayer::hangup(){
+    qDebug()<<"hangup invoked";
+}

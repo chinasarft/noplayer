@@ -75,6 +75,9 @@ public slots:
     void Stop();
     void repaint();
 
+    void call(QVariant sipAccount);
+    void hangup();
+
 private slots:
     void handleWindowChanged(QQuickWindow *win);
 

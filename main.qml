@@ -68,6 +68,7 @@ Window {
             text: "call"
 
             onClicked: {
+                icePlayer.call(lineEdit.text)
                 console.log("call button pressed")
             }
 
@@ -88,6 +89,7 @@ Window {
             text: "hangup"
 
             onClicked: {
+                icePlayer.hangup()
                 console.log("hangup button pressed")
             }
 
