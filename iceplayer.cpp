@@ -8,6 +8,37 @@
 #include "g711.h"
 #define THIS_FILE "iceplayer.cpp"
 
+#define RTP_TEST
+
+#ifdef RTP_TEST
+#include <QFile>
+
+QFile audioFile("/Users/liuye/Documents/qml/iceplayer/a.mulaw");
+int audioFeed(void *opaque, uint8_t *buf, int buf_size)
+{
+    if(!audioFile.isOpen()) {
+        audioFile.open(QIODevice::ReadOnly);
+    }
+    if(audioFile.isOpen()) {
+        return audioFile.read((char *)buf, buf_size);
+    }
+    return -1;
+}
+
+QFile videoFile("/Users/liuye/Documents/qml/iceplayer/v.h264");
+int videoFeed(void *opaque, uint8_t *buf, int buf_size)
+{
+    if(!videoFile.isOpen()) {
+        videoFile.open(QIODevice::ReadOnly);
+    }
+    if(videoFile.isOpen()) {
+        return videoFile.read((char *)buf, buf_size);
+    }
+    return -1;
+}
+
+#endif
+
 QGLRenderer::~QGLRenderer()
 {
     delete m_program;
@@ -213,14 +244,6 @@ IcePlayer::IcePlayer()
     connect(this, &QQuickItem::windowChanged, this, &IcePlayer::handleWindowChanged);
 
     loginfo("pwd:{}", QDir::currentPath().toStdString());
-
-    InputParam param;
-    param.userData_ = this;
-    param.name_ = "test";
-    param.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
-    //param.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
-    param.getFrameCb_ = IcePlayer::getFrameCallback;
-    m_stream1 = std::make_shared<Input>(param);
 }
 
 void IcePlayer::handleWindowChanged(QQuickWindow *win)
@@ -250,13 +273,46 @@ void IcePlayer::repaint()
     }
 }
 
+
 void IcePlayer::sync()
 {
     if (!m_vRenderer) {
         m_vRenderer = new QGLRenderer();
         connect(window(), &QQuickWindow::afterRendering, m_vRenderer, &QGLRenderer::paint, Qt::DirectConnection);
         connect(this, &IcePlayer::pictureReady, this, &IcePlayer::repaint, Qt::QueuedConnection);
+#ifdef RTP_TEST
+        InputParam param1;
+        param1.userData_ = this;
+        param1.name_ = "video";
+        param1.feedDataCb_ = videoFeed;
+        //param1.feedCbOpaqueArg_
+        param1.formatHint_ = "h264";
+        param1.getFrameCb_ = IcePlayer::getFrameCallback;
+
+        InputParam param2;
+        param2.userData_ = this;
+        param2.name_ = "audio";
+        param2.feedDataCb_ = audioFeed;
+        param2.formatHint_ = "mulaw";
+        param2.getFrameCb_ = IcePlayer::getFrameCallback;
+        param2.audioOpts.push_back("ar");
+        param2.audioOpts.push_back("8000");
+
+        m_stream1 = std::make_shared<Input>(param1);
         m_stream1->Start();
+
+        m_stream2 = std::make_shared<Input>(param2);
+        m_stream2->Start();
+#else
+        InputParam param1;
+        param1.userData_ = this;
+        param1.name_ = "test";
+        //param1.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
+        param1.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
+        param1.getFrameCb_ = IcePlayer::getFrameCallback;
+        m_stream1 = std::make_shared<Input>(param1);
+        m_stream1->Start();
+#endif
     }
     QSize wsize = window()->size();
     logdebug("window size: width:{} height:{}", wsize.width(), wsize.height());
