@@ -9,7 +9,7 @@
 #define THIS_FILE "iceplayer.cpp"
 
 #define RTP_TEST
-#define SIP_P_TEST
+#define SIP_RTP_TEST
 
 #ifdef RTP_TEST
 #include <QFile>
@@ -506,7 +506,7 @@ void IcePlayer::hangup(){
         videoFile.close();
     }
 #ifdef SIP_RTP_TEST
-    if (iceSource_.get() == nullptr) {
+    if (iceSource_.get() != nullptr) {
         qDebug()<<"hangup call";
         iceSource_->hangup();
     }
