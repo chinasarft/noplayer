@@ -227,11 +227,16 @@ void AudioRender::Init(QAudioFormat config){
 }
 
 void AudioRender::Uninit(){
-   m_device->destroyed();
-   m_audioOutput->stop();
-   m_device = nullptr;
-   m_inited = false;
+    if (m_device) {
+        m_device->destroyed();
+        m_device = nullptr;
+    }
 
+    if (m_audioOutput) {
+        m_audioOutput->stop();
+        m_audioOutput = nullptr;
+        m_inited = false;
+    }
 }
 
 void AudioRender::PushData(void *pcmData,int size){
@@ -265,6 +270,7 @@ void AudioRender::PushG711Data(void *g711Data, int size, int lawType){
 IcePlayer::IcePlayer()
   : m_t(0)
   , m_vRenderer(0)
+  , registerOk(false)
 {
     connect(this, &QQuickItem::windowChanged, this, &IcePlayer::handleWindowChanged);
     m_vRenderer = nullptr;
@@ -441,17 +447,25 @@ void IcePlayer::call(QVariant sipAccount){
 #ifdef SIP_RTP_TEST
     if (iceSource_.get() == nullptr) {
         iceSource_ = std::make_shared<linking>();
-        sleep(5);
-    }
-    qDebug()<<"call "<<strSipAcc;
-    iceSource_->call(strSipAcc.toStdString());
-
-    if (iceSource_->GetState() != CALL_STATUS_REGISTERED) {
-        logdebug("not start stream");
+        iceSource_->SetCallee(strSipAcc.toStdString());
+        qDebug()<<"first call"<<strSipAcc;
+        connect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
         return;
     }
-#endif
+    iceSource_->SetCallee(strSipAcc.toStdString());
 
+    auto state = iceSource_->GetState();
+    if (state == CALL_STATUS_IDLE || state == CALL_STATUS_REGISTER_FAIL) {
+        logdebug("sip state wrong");
+        return;
+    }
+    makeCall();
+#endif
+}
+
+void IcePlayer::makeCall(){
+    qDebug()<<"qmlmakeCall";
+        iceSource_->call();
 #ifdef RTP_TEST
         InputParam param1;
         param1.userData_ = this;
@@ -510,6 +524,8 @@ void IcePlayer::hangup(){
         qDebug()<<"hangup call";
         iceSource_->hangup();
     }
+    Stop();
+
 #endif
     m_aRenderer.Uninit();
     m_vRenderer->ClearFrame();

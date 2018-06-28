@@ -18,6 +18,8 @@ Window {
         objectName: "player"
         height: parent.height / 5 * 2
         width: parent.width
+        //opacity: 0.0
+        //layer.enabled: false
         IcePlayer {
             id: icePlayer
         }

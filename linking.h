@@ -1,5 +1,7 @@
 #ifndef LINKING_H
 #define LINKING_H
+
+#include <QObject>
 extern "C" {
 #include "sdk_interface.h"
 }
@@ -9,19 +11,26 @@ extern "C" {
 #include <memory>
 #include <mutex>
 
-class linking
+class linking : public QObject
 {
+    Q_OBJECT
+
 public:
-    linking();
+    explicit linking();
     ~linking();
-    int call(const std::string &callee);
+    int call();
     int hangup();
 
     std::shared_ptr<std::vector<uint8_t>> PopVideoData();
     std::shared_ptr<std::vector<uint8_t>> PopAudioData();
     void PushVideoData(uint8_t * ptr, int size);
     void PushAudioData(uint8_t * ptr, int size);
+    std::string GetCallee(){return callee_;}
+    void SetCallee(std::string s) {callee_ = s;}
     CallStatus GetState(){return state;}
+
+signals:
+    void registerSuccess();
 
 private:
     std::string sipServerHost_;
@@ -38,6 +47,7 @@ private:
     std::thread eventThread;
     bool quit_;
     bool sendFlag_; //没融合在
+    bool registerOkEmited = false;
 
 private:
     int registerAccount();

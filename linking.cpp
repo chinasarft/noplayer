@@ -1,6 +1,7 @@
 #include "linking.h"
 #include "input.hpp"
 #define THIS_FILE "linking.cpp"
+#include <QDebug>
 
 linking::linking()
 {
@@ -19,6 +20,7 @@ linking::linking()
 }
 
 linking::~linking() {
+    qDebug()<<"~linking";
     if (state == CALL_STATUS_REGISTERED || state == CALL_STATUS_REGISTER_FAIL) {
         UnRegister(accountID_);
     }
@@ -28,13 +30,13 @@ linking::~linking() {
     }
 }
 
-int linking::call(const std::string &callee)
+int linking::call()
 {
     if (!isRegistered) {
         logerror("not registered");
         return -1;
     }
-    logerror("call:{}", callee.c_str());
+    logerror("call:{}", callee_.c_str());
     logger_flush();
     switch(state) {
     case CALL_STATUS_REGISTER_FAIL:
@@ -45,7 +47,6 @@ int linking::call(const std::string &callee)
         break;
     }
 
-    callee_ = callee;
     int callid = -1;
     ErrorID err;
     loginfo("account:{} call {}", accountID_, callee_.c_str());
@@ -63,6 +64,7 @@ int linking::call(const std::string &callee)
 int linking::hangup()
 {
     if (accountID_ > -1 && callID_ > -1) {
+        qDebug()<<"HangupCall";
         ErrorID err = HangupCall( accountID_, callID_);
         if (err != RET_OK) {
             return err;
@@ -127,7 +129,6 @@ void linking::PushVideoData(uint8_t * ptr, int size)
     videoQ_.push(std::make_shared<std::vector<uint8_t>>(ptr, ptr+size));
 }
 
-
 void linking::eventHandler(void *opaque){
     linking * obj = (linking *)opaque;
 
@@ -150,6 +151,11 @@ void linking::eventHandler(void *opaque){
                     loginfo("CALL_STATUS_REGISTERED");
                     obj->isRegistered = true;
                     obj->state = CALL_STATUS_REGISTERED;
+                    if (obj->registerOkEmited == false) {
+                        qDebug()<<"sip state ok";
+                        obj->registerOkEmited = true;
+                        emit obj->registerSuccess();
+                    }
             }
 
             break;
