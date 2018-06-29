@@ -2,6 +2,7 @@
 #include "input.hpp"
 #define THIS_FILE "linking.cpp"
 #include <QDebug>
+#include <QDateTime>
 
 linking::linking()
 {
@@ -119,6 +120,10 @@ void linking::PushAudioData(uint8_t * ptr, int size)
 {
     logdebug("ice push audio data:{}", size);
     std::lock_guard<std::mutex> lock(aqMutex_);
+    if (receiveFirstAudio == false) {
+        emit onFirstAudio(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz"));
+        receiveFirstAudio = true;
+    }
     audioQ_.push(std::make_shared<std::vector<uint8_t>>(ptr, ptr+size));
 }
 
@@ -126,6 +131,10 @@ void linking::PushVideoData(uint8_t * ptr, int size)
 {
     logdebug("ice push video data:{}", size);
     std::lock_guard<std::mutex> lock(vqMutex_);
+    if (receiveFirstVideo == false) {
+        emit onFirstVideo(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz"));
+        receiveFirstVideo = true;
+    }
     videoQ_.push(std::make_shared<std::vector<uint8_t>>(ptr, ptr+size));
 }
 

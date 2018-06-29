@@ -71,6 +71,8 @@ public:
 signals:
     void tChanged();
     void pictureReady();
+    void onFirstAudioPktTime(QString);
+    void onFirstVideoPktTime(QString);
 
 public slots:
     void sync();
@@ -81,6 +83,9 @@ public slots:
     void call(QVariant sipAccount);
     void makeCall();
     void hangup();
+
+    void firstAudioPktTime(QString);
+    void firstVideoPktTime(QString);
 
 private slots:
     void handleWindowChanged(QQuickWindow *win);

@@ -9,7 +9,7 @@
 #define THIS_FILE "iceplayer.cpp"
 
 #define RTP_TEST
-#define SIP_RTP_TEST
+//#define SIP_RTP_TEST
 
 #ifdef RTP_TEST
 #include <QFile>
@@ -450,6 +450,8 @@ void IcePlayer::call(QVariant sipAccount){
         iceSource_->SetCallee(strSipAcc.toStdString());
         qDebug()<<"first call"<<strSipAcc;
         connect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
+        connect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
+        connect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
         return;
     }
     iceSource_->SetCallee(strSipAcc.toStdString());
@@ -459,13 +461,23 @@ void IcePlayer::call(QVariant sipAccount){
         logdebug("sip state wrong");
         return;
     }
-    makeCall();
 #endif
+    makeCall();
+}
+
+void IcePlayer::firstAudioPktTime(QString timestr) {
+    emit onFirstAudioPktTime(timestr);
+}
+void IcePlayer::firstVideoPktTime(QString timestr) {
+    emit onFirstVideoPktTime(timestr);
 }
 
 void IcePlayer::makeCall(){
     qDebug()<<"qmlmakeCall";
+#ifdef SIP_RTP_TEST
         iceSource_->call();
+#endif
+
 #ifdef RTP_TEST
         InputParam param1;
         param1.userData_ = this;
@@ -521,8 +533,13 @@ void IcePlayer::hangup(){
     }
 #ifdef SIP_RTP_TEST
     if (iceSource_.get() != nullptr) {
+        disconnect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
+        disconnect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
+        disconnect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
+        return;
         qDebug()<<"hangup call";
         iceSource_->hangup();
+        iceSource_.reset();
     }
     Stop();
 

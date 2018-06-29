@@ -31,6 +31,8 @@ public:
 
 signals:
     void registerSuccess();
+    void onFirstAudio(QString timestr);
+    void onFirstVideo(QString timestr);
 
 private:
     std::string sipServerHost_;
@@ -57,6 +59,8 @@ private:
     std::mutex vqMutex_;
     std::queue<std::shared_ptr<std::vector<uint8_t>>> videoQ_;
     std::queue<std::shared_ptr<std::vector<uint8_t>>> audioQ_;
+    bool receiveFirstAudio = false;
+    bool receiveFirstVideo = false;
 };
 
 #endif // LINKING_H
