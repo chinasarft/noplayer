@@ -71,8 +71,8 @@ public:
 signals:
     void tChanged();
     void pictureReady();
-    void onFirstAudioPktTime(QString);
-    void onFirstVideoPktTime(QString);
+    void getFirstAudioPktTime(QString timestr);
+    void getFirstVideoPktTime(QString timestr);
 
 public slots:
     void sync();

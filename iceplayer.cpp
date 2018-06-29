@@ -465,10 +465,12 @@ void IcePlayer::call(QVariant sipAccount){
 }
 
 void IcePlayer::firstAudioPktTime(QString timestr) {
-    emit onFirstAudioPktTime(timestr);
+    qDebug()<<"afirst:"<<timestr;
+    emit getFirstAudioPktTime(timestr);
 }
 void IcePlayer::firstVideoPktTime(QString timestr) {
-    emit onFirstVideoPktTime(timestr);
+    qDebug()<<"vfirst:"<<timestr;
+    emit getFirstVideoPktTime(timestr);
 }
 
 void IcePlayer::makeCall(){
@@ -531,19 +533,19 @@ void IcePlayer::hangup(){
     if(videoFile.isOpen()) {
         videoFile.close();
     }
-#ifdef SIP_RTP_TEST
-    if (iceSource_.get() != nullptr) {
-        disconnect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
-        disconnect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
-        disconnect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
-        return;
-        qDebug()<<"hangup call";
-        iceSource_->hangup();
-        iceSource_.reset();
-    }
-    Stop();
+    if (sourceType_ == 0) {
+        if (iceSource_.get() != nullptr) {
+            disconnect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
+            disconnect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
+            disconnect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
+            return;
+            qDebug()<<"hangup call";
+            iceSource_->hangup();
+            iceSource_.reset();
+        }
+        Stop();
 
-#endif
+    }
     m_aRenderer.Uninit();
     m_vRenderer->ClearFrame();
     window()->update();

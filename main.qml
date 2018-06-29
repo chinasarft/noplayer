@@ -201,9 +201,9 @@ Window {
                     Connections
                     {
                         target: icePlayer
-                        onFirstAudioPktTime: function (str)
+                        onGetFirstAudioPktTime:
                         {
-                            firstAudioTime.text=str;
+                            firstAudioTime.text=timestr;
                         }
 
                     }
@@ -233,9 +233,9 @@ Window {
                     Connections
                     {
                         target: icePlayer
-                        onFirstVideoPktTime: function (str)
+                        onGetFirstVideoPktTime:
                         {
-                            firstVideoTime.text=str;
+                            firstVideoTime.text=timestr;
                         }
 
                     }
