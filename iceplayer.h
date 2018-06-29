@@ -79,6 +79,7 @@ public slots:
     void cleanup();
     void Stop();
     void repaint();
+    void setSourceType(QVariant stype);
 
     void call(QVariant sipAccount);
     void makeCall();
@@ -106,6 +107,7 @@ private:
     std::shared_ptr<linking> iceSource_;
     std::shared_ptr<std::vector<uint8_t>> buffer_; //视频帧ffmpeg一次读取不完，所以需要记录下来下次读
     bool registerOk;
+    int sourceType_ = 0; // 0 sip, 1 file, 2 h264/pcmu file
 };
 
 #endif // ICEPLAYER_H

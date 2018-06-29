@@ -3,6 +3,7 @@ import QtQuick.Controls 2.2
 import QtQuick.Window 2.2
 import OpenGLUnderQML 1.0
 import QtQuick.Layouts 1.3
+import QtQuick.Dialogs 1.2
 import "qrc:/ui/"
 
 Window {
@@ -30,6 +31,61 @@ Window {
             }
         }
 
+        ComboBox {
+            id: soureType
+            editable: false
+            currentIndex: 0
+            model: ListModel {
+                id: cbItems
+                ListElement { text: "sip"; color: "Yellow" }
+                ListElement { text: "file"; color: "Green" }
+                ListElement { text: "h264/pcmu file"; color: "Brown" }
+            }
+            textRole: "text"
+            width: parent.width
+            onCurrentIndexChanged: {
+                console.debug(cbItems.get(currentIndex).text + ", " + cbItems.get(currentIndex).color)
+                icePlayer.setSourceType(soureType.currentIndex)
+            }
+        }
+
+        RowLayout {
+            visible: soureType.currentIndex != 0
+            Button {
+                   id:openBtn
+                   height: 25
+                   text:qsTr("浏览...")
+                   onClicked: {
+                       fds.open();
+                   }
+               }
+               Label {
+                   id: labels
+                   text: qsTr("")
+                   height: 25
+                   color: "white"
+               }
+
+               FileDialog {
+                   id:fds
+                   title: "选择文件"
+                   folder: shortcuts.desktop
+                   selectExisting: true
+                   selectFolder: false
+                   selectMultiple: false
+                   //nameFilters: ["json文件 (*.json)"]
+                   onAccepted: {
+                       labels.text = fds.fileUrl;
+                       console.log("You chose: " + fds.fileUrl);
+                   }
+
+                   onRejected: {
+                       labels.text = "";
+                       console.log("Canceled");
+                   }
+
+               }
+        }
 
         RowLayout {
             //anchors.fill: parent //奇怪的是会影响spacing，变得很大

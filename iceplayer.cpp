@@ -8,10 +8,6 @@
 #include "g711.h"
 #define THIS_FILE "iceplayer.cpp"
 
-#define RTP_TEST
-//#define SIP_RTP_TEST
-
-#ifdef RTP_TEST
 #include <QFile>
 
 QFile audioFile("/Users/liuye/Documents/qml/iceplayer/a.mulaw");
@@ -48,7 +44,6 @@ int videoFeed(void *opaque, uint8_t *buf, int buf_size)
     return -1;
 }
 
-#endif
 
 QGLRenderer::~QGLRenderer()
 {
@@ -362,6 +357,10 @@ void IcePlayer::sync()
     m_vRenderer->setWindow(window());
 }
 
+void IcePlayer::setSourceType(QVariant stype){
+    sourceType_ = stype.toInt();
+}
+
 void IcePlayer::Stop() {
     logger_flush();
     qDebug()<<"iceplayer stop";
@@ -444,24 +443,24 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
 void IcePlayer::call(QVariant sipAccount){
     QString strSipAcc = sipAccount.toString();
     qDebug()<<strSipAcc;
-#ifdef SIP_RTP_TEST
-    if (iceSource_.get() == nullptr) {
-        iceSource_ = std::make_shared<linking>();
+    if(sourceType_ == 0) {
+        if (iceSource_.get() == nullptr) {
+            iceSource_ = std::make_shared<linking>();
+            iceSource_->SetCallee(strSipAcc.toStdString());
+            qDebug()<<"first call"<<strSipAcc;
+            connect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
+            connect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
+            connect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
+            return;
+        }
         iceSource_->SetCallee(strSipAcc.toStdString());
-        qDebug()<<"first call"<<strSipAcc;
-        connect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
-        connect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
-        connect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
-        return;
-    }
-    iceSource_->SetCallee(strSipAcc.toStdString());
 
-    auto state = iceSource_->GetState();
-    if (state == CALL_STATUS_IDLE || state == CALL_STATUS_REGISTER_FAIL) {
-        logdebug("sip state wrong");
-        return;
+        auto state = iceSource_->GetState();
+        if (state == CALL_STATUS_IDLE || state == CALL_STATUS_REGISTER_FAIL) {
+            logdebug("sip state wrong");
+            return;
+        }
     }
-#endif
     makeCall();
 }
 
@@ -474,52 +473,53 @@ void IcePlayer::firstVideoPktTime(QString timestr) {
 
 void IcePlayer::makeCall(){
     qDebug()<<"qmlmakeCall";
-#ifdef SIP_RTP_TEST
+    if(sourceType_ == 0) {
         iceSource_->call();
-#endif
+    }
 
-#ifdef RTP_TEST
-        InputParam param1;
+    InputParam param1;
+    InputParam param2;
+    if(sourceType_ == 2 || sourceType_ == 0) {
         param1.userData_ = this;
         param1.name_ = "video";
         param1.feedCbOpaqueArg_ = this;
         param1.formatHint_ = "h264";
         param1.getFrameCb_ = IcePlayer::getFrameCallback;
 
-        InputParam param2;
+
         param2.userData_ = this;
         param2.name_ = "audio";
-
         param2.formatHint_ = "mulaw";
         param2.getFrameCb_ = IcePlayer::getFrameCallback;
         param2.feedCbOpaqueArg_ = this;
         param2.audioOpts.push_back("ar");
         param2.audioOpts.push_back("8000");
 
-#ifdef SIP_RTP_TEST
-        param1.feedDataCb_ = feedFrameCallbackVideo;
-        param2.feedDataCb_ = feedFrameCallbackAudio;
-#else
+
         param1.feedDataCb_ = videoFeed;
         param2.feedDataCb_ = audioFeed;
-#endif
+    }
 
-        loginfo("start stream1 and stream2");
-        m_stream1 = std::make_shared<Input>(param1);
-        m_stream1->Start();
+    if(sourceType_ == 0) {
+        param1.feedDataCb_ = feedFrameCallbackVideo;
+        param2.feedDataCb_ = feedFrameCallbackAudio;
+    }
 
-        m_stream2 = std::make_shared<Input>(param2);
-        m_stream2->Start();
-#else
-        InputParam param1;
+    if (sourceType_ == 1) {
         param1.userData_ = this;
         param1.name_ = "test";
-        //param1.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
-        param1.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
+        param1.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
         param1.getFrameCb_ = IcePlayer::getFrameCallback;
-        m_stream1 = std::make_shared<Input>(param1);
-        m_stream1->Start();
-#endif
+    }
+
+    loginfo("start stream1 and stream2");
+    m_stream1 = std::make_shared<Input>(param1);
+    m_stream1->Start();
+
+    if(sourceType_ == 0 || sourceType_ == 2) {
+        m_stream2 = std::make_shared<Input>(param2);
+        m_stream2->Start();
+    }
 }
 
 void IcePlayer::hangup(){

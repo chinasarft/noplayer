@@ -6,11 +6,11 @@
 
 linking::linking()
 {
-    sipServerHost_ = "123.59.204.198";
-    iceServerHost_ = "123.59.204.198";
-    mqttServerHost_ = "123.59.204.198";
-    accName_ = "1042";
-    accPwd_ = "1042";
+    sipServerHost_ = "39.107.247.14";
+    iceServerHost_ = "39.107.247.14";
+    mqttServerHost_ = "39.107.247.14";
+    accName_ = "1742";
+    accPwd_ = "2RCuSQx8";
 
     accountID_ = -1;
     state = CALL_STATUS_IDLE;
