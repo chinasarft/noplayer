@@ -11,6 +11,7 @@ extern "C" {
 #include <memory>
 #include <mutex>
 #include "ThreadCleaner.h"
+#include <fstream>
 
 class linking : public QObject, StopClass
 {
@@ -63,6 +64,7 @@ private:
     std::queue<std::shared_ptr<std::vector<uint8_t>>> audioQ_;
     bool receiveFirstAudio = false;
     bool receiveFirstVideo = false;
+    std::shared_ptr<std::fstream> h264File;
 };
 
 #endif // LINKING_H

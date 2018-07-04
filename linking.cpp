@@ -3,6 +3,8 @@
 #define THIS_FILE "linking.cpp"
 #include <QDebug>
 #include <QDateTime>
+#include <sstream>
+#include <iostream>
 
 linking::linking()
 {
@@ -81,6 +83,10 @@ int linking::hangup()
         callID_ = -1;
         state = CALL_STATUS_HANGUP;
     }
+    if(h264File.get() != nullptr && h264File->is_open()) {
+        h264File->close();
+        h264File.reset();
+    }
     return 0;
 }
 
@@ -137,8 +143,22 @@ void linking::PushAudioData(uint8_t * ptr, int size)
 
 void linking::PushVideoData(uint8_t * ptr, int size)
 {
+
     logdebug("ice push video data:{}", size);
     std::lock_guard<std::mutex> lock(vqMutex_);
+
+    if(h264File.get() == nullptr) {
+        std::stringstream streamname;
+        streamname << "call"<<(void *)this<<".h264";
+        std::string name;
+        streamname >> name;
+        h264File = std::make_shared<std::fstream>();
+        h264File->open(name, std::ios::out | std::ios::binary);
+    }
+    if(h264File.get() != nullptr && h264File->is_open()) {
+        h264File->write((char *)ptr, size);
+    }
+
     if (receiveFirstVideo == false) {
         emit onFirstVideo(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz"));
         receiveFirstVideo = true;

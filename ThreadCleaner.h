@@ -7,7 +7,7 @@
 
 class StopClass {
 public:
-    void Stop() = 0;
+    virtual void Stop() = 0;
 };
 
 class ThreadCleaner

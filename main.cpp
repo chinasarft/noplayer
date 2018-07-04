@@ -4,7 +4,7 @@
 #define THIS_FILE "qmlmain.cpp"
 
 static Media mediaConfig[2] = {
-    {STREAM_AUDIO, CODEC_G711U, 8000 ,1},
+    {STREAM_AUDIO, CODEC_G711A, 8000 ,1},
     {STREAM_VIDEO, CODEC_H264, 90000, 0}
 };
 static int mediaLength = 2;
@@ -14,7 +14,6 @@ int main(int argc, char *argv[])
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     QGuiApplication app(argc, argv);
-
 
     qmlRegisterType<IcePlayer>("OpenGLUnderQML", 1, 0, "IcePlayer");
 
@@ -27,6 +26,9 @@ int main(int argc, char *argv[])
         logerror("InitSDK fail:{}", err);
         return (int)err;
     }
+    setPjLogLevel(4);
+
+
 
     QQmlApplicationEngine engine;
     engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
