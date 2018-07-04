@@ -8,6 +8,7 @@
 #include <memory>
 #include <input.hpp>
 #include "linking.h"
+#include "ThreadCleaner.h"
 
 class QGLRenderer : public QObject, protected QOpenGLFunctions
 {
@@ -108,6 +109,7 @@ private:
     std::shared_ptr<std::vector<uint8_t>> buffer_; //视频帧ffmpeg一次读取不完，所以需要记录下来下次读
     bool registerOk;
     int sourceType_ = 0; // 0 sip, 1 file, 2 h264/pcmu file
+    ThreadCleaner * cleaner_;
 };
 
 #endif // ICEPLAYER_H

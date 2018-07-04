@@ -11,6 +11,8 @@ linking::linking()
     mqttServerHost_ = "39.107.247.14";
     accName_ = "1742";
     accPwd_ = "2RCuSQx8";
+    //accName_ = "1744";
+    //accPwd_ =  "QWtIppao";
 
     accountID_ = -1;
     state = CALL_STATUS_IDLE;
@@ -22,13 +24,7 @@ linking::linking()
 
 linking::~linking() {
     qDebug()<<"~linking";
-    if (state == CALL_STATUS_REGISTERED || state == CALL_STATUS_REGISTER_FAIL) {
-        UnRegister(accountID_);
-    }
-    quit_ = true;
-    if (eventThread.joinable()) {
-        eventThread.join();
-    }
+
 }
 
 int linking::call()
@@ -62,8 +58,20 @@ int linking::call()
     return 0;
 }
 
+void linking::Stop()
+{
+    if (state == CALL_STATUS_REGISTERED || state == CALL_STATUS_REGISTER_FAIL) {
+        UnRegister(accountID_);
+    }
+
+    if (eventThread.joinable()) {
+        eventThread.join();
+    }
+}
+
 int linking::hangup()
 {
+    quit_ = true;
     if (accountID_ > -1 && callID_ > -1) {
         qDebug()<<"HangupCall";
         ErrorID err = HangupCall( accountID_, callID_);

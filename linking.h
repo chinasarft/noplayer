@@ -10,13 +10,15 @@ extern "C" {
 #include <queue>
 #include <memory>
 #include <mutex>
+#include "ThreadCleaner.h"
 
-class linking : public QObject
+class linking : public QObject, StopClass
 {
     Q_OBJECT
 
 public:
     explicit linking();
+    void Stop();
     ~linking();
     int call();
     int hangup();

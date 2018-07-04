@@ -526,13 +526,7 @@ void IcePlayer::makeCall(){
 
 void IcePlayer::hangup(){
     qDebug()<<"hangup invoked";
-    Stop();
-    if(audioFile.isOpen()) {
-        audioFile.close();
-    }
-    if(videoFile.isOpen()) {
-        videoFile.close();
-    }
+
     if (sourceType_ == 0) {
         if (iceSource_.get() != nullptr) {
             disconnect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
@@ -541,14 +535,19 @@ void IcePlayer::hangup(){
             return;
             qDebug()<<"hangup call";
             iceSource_->hangup();
-            iceSource_.reset();
         }
-        Stop();
-
     }
+    if(audioFile.isOpen()) {
+        audioFile.close();
+    }
+    if(videoFile.isOpen()) {
+        videoFile.close();
+    }
+
     m_aRenderer.Uninit();
     m_vRenderer->ClearFrame();
     window()->update();
+    Stop();
 }
 
 //audio
