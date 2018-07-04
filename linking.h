@@ -10,10 +10,11 @@ extern "C" {
 #include <queue>
 #include <memory>
 #include <mutex>
-#include "ThreadCleaner.h"
 #include <fstream>
+#include "Statistics.h"
+#include <ThreadCleaner.h>
 
-class linking : public QObject, StopClass
+class linking : public QObject, public StopClass
 {
     Q_OBJECT
 
@@ -23,6 +24,7 @@ public:
     ~linking();
     int call();
     int hangup();
+    std::string GetStreamInfo();
 
     std::shared_ptr<std::vector<uint8_t>> PopVideoData();
     std::shared_ptr<std::vector<uint8_t>> PopAudioData();
@@ -50,7 +52,7 @@ private:
     bool isRegistered;
     int callID_;
     std::thread eventThread;
-    bool quit_;
+    bool quit_ = false;
     bool sendFlag_; //没融合在
     bool registerOkEmited = false;
 
@@ -65,6 +67,7 @@ private:
     bool receiveFirstAudio = false;
     bool receiveFirstVideo = false;
     std::shared_ptr<std::fstream> h264File;
+    std::shared_ptr<Statistics> stat_;
 };
 
 #endif // LINKING_H

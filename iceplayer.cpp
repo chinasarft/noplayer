@@ -222,14 +222,16 @@ void AudioRender::Init(QAudioFormat config){
 }
 
 void AudioRender::Uninit(){
-    if (m_device) {
-        m_device->destroyed();
-        m_device = nullptr;
-    }
+    if (m_inited) {
+        if (m_device) {
+            m_device->destroyed();
+            m_device = nullptr;
+        }
 
-    if (m_audioOutput) {
-        m_audioOutput->stop();
-        m_audioOutput = nullptr;
+        if (m_audioOutput) {
+            m_audioOutput->stop();
+            m_audioOutput = nullptr;
+        }
         m_inited = false;
     }
 }
@@ -270,6 +272,20 @@ IcePlayer::IcePlayer()
     connect(this, &QQuickItem::windowChanged, this, &IcePlayer::handleWindowChanged);
     m_vRenderer = nullptr;
     loginfo("pwd:{}", QDir::currentPath().toStdString());
+
+    timer_ = std::make_shared<QTimer>();
+    connect(timer_.get(), SIGNAL(timeout()), this, SLOT(updateStreamInfo()));
+    timer_->start(1000);
+}
+
+void IcePlayer::updateStreamInfo()
+{
+    //会有竞争问题这里
+    if (iceSource_.get()) {
+        std::string infoStr = iceSource_->GetStreamInfo();
+        emit streamInfoUpdate(infoStr.c_str());
+
+    }
 }
 
 void IcePlayer::handleWindowChanged(QQuickWindow *win)
@@ -294,8 +310,10 @@ void IcePlayer::cleanup()
 void IcePlayer::repaint()
 {
     if (m_vRenderer) {
-        if (window())
+        if (window()) {
+            loginfo("render one frame");
             window()->update();
+        }
     }
 }
 
@@ -365,12 +383,12 @@ void IcePlayer::Stop() {
     logger_flush();
     qDebug()<<"iceplayer stop";
     if (m_stream1.get() != nullptr){
-        m_stream1->Stop();
+        ThreadCleaner::GetThreadCleaner()->Push(m_stream1);
         m_stream1.reset();
         qDebug()<<"stream1 stop";
     }
     if (m_stream2.get() != nullptr){
-        m_stream2->Stop();
+        ThreadCleaner::GetThreadCleaner()->Push(m_stream2);
         m_stream2.reset();
         qDebug()<<"stream2 stop";
     }
@@ -527,14 +545,19 @@ void IcePlayer::makeCall(){
 void IcePlayer::hangup(){
     qDebug()<<"hangup invoked";
 
+    Stop();
     if (sourceType_ == 0) {
         if (iceSource_.get() != nullptr) {
             disconnect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
             disconnect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
             disconnect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
-            return;
             qDebug()<<"hangup call";
             iceSource_->hangup();
+            //ThreadCleaner::GetThreadCleaner()->Push(std::dynamic_pointer_cast<StopClass>(iceSource_));
+            ThreadCleaner::GetThreadCleaner()->Push(iceSource_);
+
+            qDebug()<<"xxxx:"<<iceSource_.use_count();
+            iceSource_.reset();
         }
     }
     if(audioFile.isOpen()) {
@@ -547,7 +570,9 @@ void IcePlayer::hangup(){
     m_aRenderer.Uninit();
     m_vRenderer->ClearFrame();
     window()->update();
-    Stop();
+
+    loginfo("--------------flush----------------");
+    logger_flush();
 }
 
 //audio
@@ -557,7 +582,11 @@ int IcePlayer::feedFrameCallbackAudio(void *opaque, uint8_t *buf, int buf_size)
     std::shared_ptr<std::vector<uint8_t>> audioData;
     int times = 5;
     while(times > 0) {
-        audioData = p->iceSource_->PopAudioData();
+        auto s = p->iceSource_.get();
+        if (s == nullptr) {
+            return -1;
+        }
+        audioData = s->PopAudioData();
         if (audioData.get() == nullptr) {
             sleep(1);
             times--;
@@ -566,7 +595,7 @@ int IcePlayer::feedFrameCallbackAudio(void *opaque, uint8_t *buf, int buf_size)
             return audioData->size();
         }
     }
-    return 0;
+    return -1;
 }
 
 //video
@@ -576,7 +605,7 @@ int IcePlayer::feedFrameCallbackVideo(void *opaque, uint8_t *buf, int buf_size)
     int times = 5;
     while(true) {
         if (times == 0)
-            return 0;
+            return -1;
         if (p->buffer_.get() != nullptr) {
             auto storeSize = p->buffer_->size();
             if (storeSize > 0) {
@@ -595,7 +624,11 @@ int IcePlayer::feedFrameCallbackVideo(void *opaque, uint8_t *buf, int buf_size)
 
         std::shared_ptr<std::vector<uint8_t>> videoData;
         while(times > 0) {
-            videoData = p->iceSource_->PopVideoData();
+            auto s = p->iceSource_.get();
+            if (s == nullptr) {
+                return -1;
+            }
+            videoData = s->PopVideoData();
             if (videoData.get() == nullptr) {
                 sleep(1);
                 times--;
@@ -605,5 +638,5 @@ int IcePlayer::feedFrameCallbackVideo(void *opaque, uint8_t *buf, int buf_size)
             }
         }
     }
-    return 0;
+    return -1;
 }

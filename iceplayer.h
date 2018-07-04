@@ -5,6 +5,7 @@
 #include <QtGui/QOpenGLShaderProgram>
 #include <QtGui/QOpenGLFunctions>
 #include <QtMultimedia>
+#include <QTimer>
 #include <memory>
 #include <input.hpp>
 #include "linking.h"
@@ -58,7 +59,7 @@ public:
 private:
     QAudioFormat m_audioConfig;
     std::shared_ptr<QAudioOutput> m_audioOutput;
-    bool m_inited;
+    bool m_inited = false;
     QIODevice *m_device;
 };
 
@@ -74,6 +75,7 @@ signals:
     void pictureReady();
     void getFirstAudioPktTime(QString timestr);
     void getFirstVideoPktTime(QString timestr);
+    void streamInfoUpdate(QString infoStr);
 
 public slots:
     void sync();
@@ -91,6 +93,7 @@ public slots:
 
 private slots:
     void handleWindowChanged(QQuickWindow *win);
+    void updateStreamInfo();
 
 private:
     static void getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame);
@@ -109,7 +112,8 @@ private:
     std::shared_ptr<std::vector<uint8_t>> buffer_; //视频帧ffmpeg一次读取不完，所以需要记录下来下次读
     bool registerOk;
     int sourceType_ = 0; // 0 sip, 1 file, 2 h264/pcmu file
-    ThreadCleaner * cleaner_;
+
+    std::shared_ptr<QTimer> timer_;
 };
 
 #endif // ICEPLAYER_H

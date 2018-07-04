@@ -12,7 +12,7 @@ Window {
     width: 360
     height: 640
     color: "#000000"
-    title: qsTr("Hello World")
+    title: qsTr("ice player")
 
     Column {
         anchors.fill: parent
@@ -159,6 +159,8 @@ Window {
                 Layout.preferredHeight: 40
 
                 onClicked: {
+                    firstAudioTime.text="yyyy-MM-dd hh:mm:ss.zzz"
+                    firstVideoTime.text="yyyy-MM-dd hh:mm:ss.zzz"
                     icePlayer.hangup()
                     console.log("hangup button pressed")
                 }
@@ -244,7 +246,30 @@ Window {
 
         }
 
+        Rectangle{
+            height: 30
+            width: parent.width
+            color: "#bbbbbb"
+            Text{
+                id: streamInfo
+                color: "#f2f5f5"
+                text: "--------------"
+                font.pointSize: 15
+                Connections
+                {
+                    target: icePlayer
+                    onStreamInfoUpdate:
+                    {
+                        streamInfo.text=infoStr;
+                    }
+
+                }
+            }
+        }
+
     }
+
+
 
     onClosing: {
         console.log("closesssssssssssss")

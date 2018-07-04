@@ -1,5 +1,6 @@
 #include "Statistics.h"
 #include <input.hpp>
+#include <sstream>
 
 Statistics::Statistics(int interval) :
     interval_(interval)
@@ -8,6 +9,11 @@ Statistics::Statistics(int interval) :
     for (int i = 0; i < interval_; i++) {
         perSecond_[i] = 0;
     }
+}
+
+Statistics::~Statistics()
+{
+    fprintf(stderr, "~Statistics\n");
 }
 
 void Statistics::Start()
@@ -53,14 +59,28 @@ void Statistics::StatVideo(int size, bool isIDR)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     totalVideoByte_ += size;
-    videoFrameCount_++;
     curVideoStatByte_ += size;
+    videoFrameCount_++;
+    totalVideoFrameCount_++;
 }
 
 void Statistics::StatAudio(int size)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     totalAudioByte_ += size;
-    audioFrameCount_++;
     curAudioStatByte_ += size;
+    audioFrameCount_++;
+    totalAudioFrameCount_++;
+}
+
+std::string Statistics::toString()
+{
+    std::stringstream infoStream;
+    infoStream << "vFps:"<<videoFps_<<"_vRate:"<<avgVideoRate_ * 8 / 1000 << "kbps"
+               <<"_vFrames:" << totalVideoFrameCount_
+               << "_aFps:"<<audioFps_ <<"_aRate:" << avgAudioRate_ * 8 / 1000 << "kbps"
+               <<"_aFrames:" << totalAudioFrameCount_;
+    std::string infoStr;
+    infoStream >> infoStr;
+    return infoStr;
 }

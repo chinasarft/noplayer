@@ -9,6 +9,7 @@ class Statistics : public StopClass
 {
 public:
     Statistics(int videoInterval = 10);
+    ~Statistics();
     void StatVideo(int size, bool isIDR);
     void StatAudio(int size);
     int GetVideoAvgRate() {return avgVideoRate_;}
@@ -17,6 +18,7 @@ public:
     int GetAudioFps() {return audioFps_;}
     void Start();
     void Stop();
+    std::string toString();
 private:
     bool quit_ = false;
     int interval_ = 0;

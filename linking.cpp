@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <sstream>
 #include <iostream>
+#include <QTimer>
 
 linking::linking()
 {
@@ -22,6 +23,14 @@ linking::linking()
     isRegistered = false;
     quit_ = false;
     registerAccount();
+}
+
+std::string linking::GetStreamInfo()
+{
+    if (stat_.get() != nullptr) {
+        return stat_->toString();
+    }
+    return "no info";
 }
 
 linking::~linking() {
@@ -57,6 +66,8 @@ int linking::call()
     }
 
     callID_ = callid;
+    stat_ = std::make_shared<Statistics>();
+    stat_->Start();
     return 0;
 }
 
@@ -74,6 +85,8 @@ void linking::Stop()
 int linking::hangup()
 {
     quit_ = true;
+    ThreadCleaner::GetThreadCleaner()->Push(stat_);
+    stat_.reset();
     if (accountID_ > -1 && callID_ > -1) {
         qDebug()<<"HangupCall";
         ErrorID err = HangupCall( accountID_, callID_);
@@ -87,6 +100,7 @@ int linking::hangup()
         h264File->close();
         h264File.reset();
     }
+
     return 0;
 }
 
@@ -108,6 +122,9 @@ int linking::registerAccount()
 
 std::shared_ptr<std::vector<uint8_t>> linking::PopAudioData()
 {
+    if (quit_)
+        return nullptr;
+
     std::lock_guard<std::mutex> lock(aqMutex_);
     if (audioQ_.size() > 0){
         auto d = audioQ_.front();
@@ -120,6 +137,9 @@ std::shared_ptr<std::vector<uint8_t>> linking::PopAudioData()
 
 std::shared_ptr<std::vector<uint8_t>> linking::PopVideoData()
 {
+    if (quit_)
+        return nullptr;
+
     std::lock_guard<std::mutex> lock(vqMutex_);
     if (videoQ_.size() > 0){
         auto d = videoQ_.front();
@@ -132,6 +152,8 @@ std::shared_ptr<std::vector<uint8_t>> linking::PopVideoData()
 
 void linking::PushAudioData(uint8_t * ptr, int size)
 {
+    if (quit_)
+        return;
     logdebug("ice push audio data:{}", size);
     std::lock_guard<std::mutex> lock(aqMutex_);
     if (receiveFirstAudio == false) {
@@ -143,7 +165,8 @@ void linking::PushAudioData(uint8_t * ptr, int size)
 
 void linking::PushVideoData(uint8_t * ptr, int size)
 {
-
+    if (quit_)
+        return;
     logdebug("ice push video data:{}", size);
     std::lock_guard<std::mutex> lock(vqMutex_);
 
@@ -204,10 +227,12 @@ void linking::eventHandler(void *opaque){
                     pDataEvent->size, pDataEvent->callID, obj->accountID_);
             switch(pDataEvent->codec){
             case CODEC_H264:
+                obj->stat_->StatVideo(pDataEvent->size, false);
                 obj->PushVideoData((uint8_t*)pDataEvent->data, pDataEvent->size);
                 break;
             case CODEC_G711A:
             case CODEC_G711U:
+                obj->stat_->StatAudio(pDataEvent->size);
                 obj->PushAudioData((uint8_t*)pDataEvent->data, pDataEvent->size);
                 break;
             }
@@ -232,7 +257,6 @@ void linking::eventHandler(void *opaque){
         }
         }
     }
-
 }
 
 
