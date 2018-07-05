@@ -25,14 +25,6 @@ linking::linking()
     registerAccount();
 }
 
-std::string linking::GetStreamInfo()
-{
-    if (stat_.get() != nullptr) {
-        return stat_->toString();
-    }
-    return "no info";
-}
-
 linking::~linking() {
     qDebug()<<"~linking";
 
@@ -66,8 +58,6 @@ int linking::call()
     }
 
     callID_ = callid;
-    stat_ = std::make_shared<Statistics>();
-    stat_->Start();
     return 0;
 }
 
@@ -85,8 +75,6 @@ void linking::Stop()
 int linking::hangup()
 {
     quit_ = true;
-    ThreadCleaner::GetThreadCleaner()->Push(stat_);
-    stat_.reset();
     if (accountID_ > -1 && callID_ > -1) {
         qDebug()<<"HangupCall";
         ErrorID err = HangupCall( accountID_, callID_);
@@ -227,12 +215,10 @@ void linking::eventHandler(void *opaque){
                     pDataEvent->size, pDataEvent->callID, obj->accountID_);
             switch(pDataEvent->codec){
             case CODEC_H264:
-                obj->stat_->StatVideo(pDataEvent->size, false);
                 obj->PushVideoData((uint8_t*)pDataEvent->data, pDataEvent->size);
                 break;
             case CODEC_G711A:
             case CODEC_G711U:
-                obj->stat_->StatAudio(pDataEvent->size);
                 obj->PushAudioData((uint8_t*)pDataEvent->data, pDataEvent->size);
                 break;
             }

@@ -128,6 +128,8 @@ private:
     std::condition_variable condition_;
     std::deque<std::shared_ptr<MediaFrame>> Abuffer_;
     std::deque<std::shared_ptr<MediaFrame>> Vbuffer_;
+
+    std::mutex streamMutex_;
 };
 
 #endif // ICEPLAYER_H

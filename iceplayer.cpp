@@ -329,11 +329,11 @@ IcePlayer::IcePlayer()
 
     //emit player->pictureReady();
 
+    timer_ = std::make_shared<QTimer>();
+    connect(timer_.get(), SIGNAL(timeout()), this, SLOT(updateStreamInfo()));
+    timer_->start(1000);
     auto avsync = [this]() {
-        timer_ = std::make_shared<QTimer>();
-        connect(timer_.get(), SIGNAL(timeout()), this, SLOT(updateStreamInfo()));
-        timer_->start(1000);
-        bool hasFrame = false;
+
         while(!quit_) {
             int asize = 0;
             int vsize = 0;
@@ -410,7 +410,6 @@ IcePlayer::IcePlayer()
             }
 
         }
-        timer_->stop();
 
     };
     avsync_ = std::thread(avsync);
@@ -418,11 +417,22 @@ IcePlayer::IcePlayer()
 
 void IcePlayer::updateStreamInfo()
 {
-    //会有竞争问题这里
-    if (iceSource_.get()) {
-        std::string infoStr = iceSource_->GetStreamInfo();
-        emit streamInfoUpdate(infoStr.c_str());
+    qDebug()<<"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+    std::lock_guard<std::mutex> lock(streamMutex_);
 
+    if (m_stream1.get() && m_stream2.get()) {
+        MediaStatInfo info = m_stream1->GetMediaStatInfo();
+        info.Add(m_stream2->GetMediaStatInfo());
+
+        char infoStr[128] = {0};
+        sprintf(infoStr, "vFps:%d vBr:%d kbps vCount:%d | aFps:%d aBr:%d aCount:%d",
+                        info.videoFps, info.videoBitrate, info.totalVideoFrameCount,
+                        info.audioFps, info.audioBitrate, info.totalAudioFrameCount);
+        emit streamInfoUpdate(infoStr);
+        return;
+    }
+    if (m_stream1.get()){
+        emit streamInfoUpdate(m_stream1->GetMediaStatInfoStr());
     }
 }
 
@@ -520,6 +530,7 @@ void IcePlayer::setSourceType(QVariant stype){
 void IcePlayer::StopStream() {
     logger_flush();
     qDebug()<<"iceplayer stop";
+    std::lock_guard<std::mutex> lock(streamMutex_);
     if (m_stream1.get() != nullptr){
         ThreadCleaner::GetThreadCleaner()->Push(m_stream1);
         m_stream1.reset();
@@ -534,6 +545,7 @@ void IcePlayer::StopStream() {
 }
 
 void IcePlayer::Stop() {
+    timer_->stop();
     hangup();
     mutex_.lock();
     quit_ = true;
@@ -676,7 +688,7 @@ void IcePlayer::hangup(){
 
     mutex_.lock();
     m_aRenderer.Uninit();
-    firstFrameTime_ == 0;
+    firstFrameTime_ = 0;
     canRender_ = false;
     Abuffer_.clear();
     Vbuffer_.clear();

@@ -24,7 +24,6 @@ public:
     ~linking();
     int call();
     int hangup();
-    std::string GetStreamInfo();
 
     std::shared_ptr<std::vector<uint8_t>> PopVideoData();
     std::shared_ptr<std::vector<uint8_t>> PopAudioData();
@@ -67,7 +66,6 @@ private:
     bool receiveFirstAudio = false;
     bool receiveFirstVideo = false;
     std::shared_ptr<std::fstream> h264File;
-    std::shared_ptr<Statistics> stat_;
 };
 
 #endif // LINKING_H
