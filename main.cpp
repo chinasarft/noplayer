@@ -26,9 +26,7 @@ int main(int argc, char *argv[])
         logerror("InitSDK fail:{}", err);
         return (int)err;
     }
-    setPjLogLevel(4);
-
-
+    SetLogLevel(4);
 
     QQmlApplicationEngine engine;
     engine.load(QUrl(QStringLiteral("qrc:/main.qml")));

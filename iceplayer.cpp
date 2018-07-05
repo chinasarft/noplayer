@@ -326,14 +326,13 @@ IcePlayer::IcePlayer()
     m_vRenderer = nullptr;
     loginfo("pwd:{}", QDir::currentPath().toStdString());
 
-    timer_ = std::make_shared<QTimer>();
-    connect(timer_.get(), SIGNAL(timeout()), this, SLOT(updateStreamInfo()));
-    timer_->start(1000);
-
 
     //emit player->pictureReady();
 
     auto avsync = [this]() {
+        timer_ = std::make_shared<QTimer>();
+        connect(timer_.get(), SIGNAL(timeout()), this, SLOT(updateStreamInfo()));
+        timer_->start(1000);
         bool hasFrame = false;
         while(!quit_) {
             int asize = 0;
@@ -411,6 +410,7 @@ IcePlayer::IcePlayer()
             }
 
         }
+        timer_->stop();
 
     };
     avsync_ = std::thread(avsync);
@@ -547,6 +547,7 @@ void IcePlayer::Stop() {
 void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame) {
     IcePlayer * player = (IcePlayer *)(userData);
 
+    std::unique_lock<std::mutex> lock(player->mutex_);
     if (player->canRender_ == false)
         return;
 
@@ -557,6 +558,7 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
         logdebug("video framepts:{}", frame->pts);
         player->push(std::move(frame));
     }
+    player->condition_.notify_one();
 }
 
 void IcePlayer::call(QVariant sipAccount){
@@ -752,7 +754,6 @@ int IcePlayer::feedFrameCallbackVideo(void *opaque, uint8_t *buf, int buf_size)
 
 void IcePlayer::push(std::shared_ptr<MediaFrame> && frame)
 {
-    std::unique_lock<std::mutex> lock(mutex_);
     if(firstFrameTime_ == 0) {
         firstFrameTime_ = os_gettime_ms();
     }
@@ -761,5 +762,4 @@ void IcePlayer::push(std::shared_ptr<MediaFrame> && frame)
     } else {
         Vbuffer_.emplace_back(frame);
     }
-    condition_.notify_one();
 }
