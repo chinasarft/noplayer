@@ -3,11 +3,12 @@
 #include "iceplayer.h"
 #define THIS_FILE "qmlmain.cpp"
 
-static Media mediaConfig[2] = {
+static Media mediaConfig[3] = {
     {STREAM_AUDIO, CODEC_G711U, 8000 ,1},
+    {STREAM_AUDIO, CODEC_G711A, 8000 ,1},
     {STREAM_VIDEO, CODEC_H264, 90000, 0}
 };
-static int mediaLength = 2;
+static int mediaLength = 3;
 
 int main(int argc, char *argv[])
 {
