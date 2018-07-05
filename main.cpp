@@ -4,7 +4,7 @@
 #define THIS_FILE "qmlmain.cpp"
 
 static Media mediaConfig[2] = {
-    {STREAM_AUDIO, CODEC_G711A, 8000 ,1},
+    {STREAM_AUDIO, CODEC_G711U, 8000 ,1},
     {STREAM_VIDEO, CODEC_H264, 90000, 0}
 };
 static int mediaLength = 2;
@@ -37,6 +37,7 @@ int main(int argc, char *argv[])
     UninitSDK();
 
     ThreadCleaner::GetThreadCleaner()->Stop();
+
 
     return ret;
 }

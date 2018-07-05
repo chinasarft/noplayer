@@ -70,6 +70,7 @@ class IcePlayer : public QQuickItem
 
 public:
     explicit IcePlayer();
+    ~IcePlayer();
 
 signals:
     void tChanged();
@@ -117,7 +118,6 @@ private:
     bool registerOk;
     int sourceType_ = 0; // 0 sip, 1 file, 2 h264/pcmu file
 
-    std::shared_ptr<QTimer> timer_;
 
     //同步线程，player上做一个缓冲，同步音频和视频
     //同步：对齐到同一个墙上时钟，按照各自当前时间渲染
@@ -130,6 +130,7 @@ private:
     std::deque<std::shared_ptr<MediaFrame>> Vbuffer_;
 
     std::mutex streamMutex_;
+    std::thread timerThread_;
 };
 
 #endif // ICEPLAYER_H

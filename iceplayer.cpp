@@ -329,9 +329,13 @@ IcePlayer::IcePlayer()
 
     //emit player->pictureReady();
 
-    timer_ = std::make_shared<QTimer>();
-    connect(timer_.get(), SIGNAL(timeout()), this, SLOT(updateStreamInfo()));
-    timer_->start(1000);
+    auto timerHandle = [this]() {
+        while(!quit_) {
+            os_sleep_ms(1000);
+            updateStreamInfo();
+        }
+    };
+    timerThread_ = std::thread(timerHandle);
     auto avsync = [this]() {
 
         while(!quit_) {
@@ -415,24 +419,31 @@ IcePlayer::IcePlayer()
     avsync_ = std::thread(avsync);
 }
 
+IcePlayer::~IcePlayer()
+{
+
+}
 void IcePlayer::updateStreamInfo()
 {
-    qDebug()<<"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
     std::lock_guard<std::mutex> lock(streamMutex_);
 
     if (m_stream1.get() && m_stream2.get()) {
-        MediaStatInfo info = m_stream1->GetMediaStatInfo();
+        MediaStatInfo info;
+        info.Add(m_stream1->GetMediaStatInfo());
         info.Add(m_stream2->GetMediaStatInfo());
 
         char infoStr[128] = {0};
         sprintf(infoStr, "vFps:%d vBr:%d kbps vCount:%d | aFps:%d aBr:%d aCount:%d",
-                        info.videoFps, info.videoBitrate, info.totalVideoFrameCount,
-                        info.audioFps, info.audioBitrate, info.totalAudioFrameCount);
+                        info.videoFps, info.videoBitrate * 8 / 1000, info.totalVideoFrameCount,
+                        info.audioFps, info.audioBitrate * 8 / 1000, info.totalAudioFrameCount);
+        qDebug()<<infoStr;
         emit streamInfoUpdate(infoStr);
         return;
     }
     if (m_stream1.get()){
-        emit streamInfoUpdate(m_stream1->GetMediaStatInfoStr());
+        const char * infoStr = m_stream1->GetMediaStatInfoStr();
+        qDebug()<<infoStr;
+        emit streamInfoUpdate(infoStr);
     }
 }
 
@@ -545,12 +556,14 @@ void IcePlayer::StopStream() {
 }
 
 void IcePlayer::Stop() {
-    timer_->stop();
     hangup();
     mutex_.lock();
     quit_ = true;
     condition_.notify_one();
     mutex_.unlock();
+    if (timerThread_.joinable()) {
+        timerThread_.join();
+    }
     if(avsync_.joinable()) {
         avsync_.join();
     }
