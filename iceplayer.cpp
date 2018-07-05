@@ -10,7 +10,7 @@
 
 #include <QFile>
 
-QFile audioFile("/Users/liuye/Documents/qml/iceplayer/a.mulaw");
+QFile audioFile("/Users/liuye/Documents/qml/a.mulaw");
 static int audioFileReadSize = 0;
 int audioFeed(void *opaque, uint8_t *buf, int buf_size)
 {
@@ -27,7 +27,7 @@ int audioFeed(void *opaque, uint8_t *buf, int buf_size)
     return -1;
 }
 
-QFile videoFile("/Users/liuye/Documents/qml/iceplayer/v.h264");
+QFile videoFile("/Users/liuye/Documents/qml/v.h264");
 static int videoFileReadSize = 0;
 int videoFeed(void *opaque, uint8_t *buf, int buf_size)
 {
@@ -382,16 +382,19 @@ IcePlayer::IcePlayer()
 
             int64_t now = os_gettime_ms();
             int diff = now - firstFrameTime_;
+            if (diff < 0)
+                diff = 0;
 
+            logdebug("ready to render:{} {}", aPts, vPts);
             if (aRenderFist) {
                 if (diff < aPts - 1) {
-                    //qDebug()<<"a first: asleep:"<<aPts - 1 - diff << "size:"<<aframe->AvFrame()->linesize[0] <<" addr"<<aframe->AvFrame();
+                    qDebug()<<"a first: asleep:"<<aPts - 1 - diff << " apts:" << aPts << " vPts:"<<vPts;
                     os_sleep_ms(aPts - 1 - diff);
                 }
                  m_aRenderer.PushData(aframe->AvFrame()->data[0], aframe->AvFrame()->linesize[0]);
                  if (vPts != -1) {
                      if (diff < vPts - 1) {
-                         //qDebug()<<"a first: vsleep:"<<vPts - 1 - diff;
+                         qDebug()<<"a first: vsleep:"<<vPts - 1 - diff << " apts:" << aPts << " vPts:"<<vPts;;
                          os_sleep_ms(vPts - 1 - diff);
                      }
                      m_vRenderer->SetFrame(vframe);
@@ -399,14 +402,14 @@ IcePlayer::IcePlayer()
                  }
             } else {
                 if (vPts != -1 && diff < vPts - 1) {
-                    //qDebug()<<"v first: vsleep:"<<vPts - 1 - diff;
+                    qDebug()<<"v first: vsleep:"<<vPts - 1 - diff<< " apts:" << aPts << " vPts:"<<vPts;;
                     os_sleep_ms(vPts - 1 - diff);
                 }
                 m_vRenderer->SetFrame(vframe);
                 emit pictureReady();
                 if (aPts != -1) {
                     if (diff < aPts - 1) {
-                        //qDebug()<<"v first: asleep:"<<aPts - 1 - diff<< " size:"<<aframe->AvFrame()->linesize[0]<< " addr:"<<aframe->AvFrame();
+                        qDebug()<<"v first: asleep:"<<aPts - 1 - diff<< " apts:" << aPts << " vPts:"<<vPts;;
                         os_sleep_ms(aPts - 1 - diff);
                     }
                     m_aRenderer.PushData(aframe->AvFrame()->data[0], aframe->AvFrame()->linesize[0]);
@@ -556,6 +559,7 @@ void IcePlayer::StopStream() {
 }
 
 void IcePlayer::Stop() {
+    ThreadCleaner::GetThreadCleaner()->Push(iceSource_);
     hangup();
     mutex_.lock();
     quit_ = true;
@@ -571,10 +575,10 @@ void IcePlayer::Stop() {
 
 void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame) {
     IcePlayer * player = (IcePlayer *)(userData);
-
     std::unique_lock<std::mutex> lock(player->mutex_);
-    if (player->canRender_ == false)
+    if (player->canRender_ == false) {
         return;
+    }
 
     if(frame->GetStreamType() == STREAM_AUDIO) {
         logdebug("audio framepts:{}", frame->pts);
@@ -589,6 +593,7 @@ void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & 
 void IcePlayer::call(QVariant sipAccount){
     QString strSipAcc = sipAccount.toString();
     qDebug()<<strSipAcc;
+
     if(sourceType_ == 0) {
         if (iceSource_.get() == nullptr) {
             iceSource_ = std::make_shared<linking>();
@@ -597,11 +602,11 @@ void IcePlayer::call(QVariant sipAccount){
             connect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
             connect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
             connect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
-            return;
         }
         iceSource_->SetCallee(strSipAcc.toStdString());
 
         auto state = iceSource_->GetState();
+         loginfo("make call to {} {}", strSipAcc.toStdString(), state);
         if (state == CALL_STATUS_IDLE || state == CALL_STATUS_REGISTER_FAIL) {
             logdebug("sip state wrong");
             return;
@@ -677,16 +682,9 @@ void IcePlayer::hangup(){
     StopStream();
     if (sourceType_ == 0) {
         if (iceSource_.get() != nullptr) {
-            disconnect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
-            disconnect(iceSource_.get(), SIGNAL(onFirstAudio(QString)), this, SLOT(firstAudioPktTime(QString)));
-            disconnect(iceSource_.get(), SIGNAL(onFirstVideo(QString)), this, SLOT(firstVideoPktTime(QString)));
             qDebug()<<"hangup call";
             iceSource_->hangup();
-            //ThreadCleaner::GetThreadCleaner()->Push(std::dynamic_pointer_cast<StopClass>(iceSource_));
-            ThreadCleaner::GetThreadCleaner()->Push(iceSource_);
-
-            qDebug()<<"xxxx:"<<iceSource_.use_count();
-            iceSource_.reset();
+            iceSource_->Reset();
         }
     }
     if(audioFile.isOpen()) {

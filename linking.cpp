@@ -63,6 +63,7 @@ int linking::call()
 
 void linking::Stop()
 {
+    quit_ = true;
     if (state == CALL_STATUS_REGISTERED || state == CALL_STATUS_REGISTER_FAIL) {
         UnRegister(accountID_);
     }
@@ -74,7 +75,6 @@ void linking::Stop()
 
 int linking::hangup()
 {
-    quit_ = true;
     if (accountID_ > -1 && callID_ > -1) {
         qDebug()<<"HangupCall";
         ErrorID err = HangupCall( accountID_, callID_);
@@ -242,6 +242,22 @@ void linking::eventHandler(void *opaque){
             break;
         }
         }
+    }
+}
+
+void linking::Reset()
+{
+    sendFlag_ = false;
+    std::lock_guard<std::mutex> lock1(aqMutex_);
+    std::lock_guard<std::mutex> lock2(vqMutex_);
+    receiveFirstAudio = false;
+    receiveFirstVideo = false;
+
+    while(videoQ_.size() > 0) {
+        videoQ_.pop();
+    }
+    while(audioQ_.size() > 0) {
+        audioQ_.pop();
     }
 }
 

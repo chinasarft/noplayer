@@ -24,6 +24,7 @@ public:
     ~linking();
     int call();
     int hangup();
+    void Reset();
 
     std::shared_ptr<std::vector<uint8_t>> PopVideoData();
     std::shared_ptr<std::vector<uint8_t>> PopAudioData();
@@ -52,7 +53,7 @@ private:
     int callID_;
     std::thread eventThread;
     bool quit_ = false;
-    bool sendFlag_; //没融合在
+    bool sendFlag_; //没用目前
     bool registerOkEmited = false;
 
 private:
