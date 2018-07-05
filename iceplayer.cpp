@@ -221,6 +221,58 @@ void AudioRender::Init(QAudioFormat config){
     loginfo("init volume:{}", m_audioOutput->volume());
 }
 
+void AudioRender::Init(std::shared_ptr<MediaFrame> & frame)
+{
+    AVFrame * f = frame->AvFrame();
+    if (!m_inited) {
+        bool configOk = true;
+        QAudioFormat config;
+        config.setSampleRate(f->sample_rate);
+        config.setChannelCount(f->channels);
+        config.setCodec("audio/pcm");
+        config.setByteOrder(QAudioFormat::LittleEndian);
+
+        switch(f->format) {
+        case AV_SAMPLE_FMT_U8:
+            qDebug()<<"AV_SAMPLE_FMT_U8";
+            config.setSampleSize(8);
+            config.setSampleType(QAudioFormat::UnSignedInt);
+            break;
+        case AV_SAMPLE_FMT_S16:
+            qDebug()<<"AV_SAMPLE_FMT_S16";
+            config.setSampleSize(16);
+            config.setSampleType(QAudioFormat::SignedInt);
+            break;
+        case AV_SAMPLE_FMT_S32:
+            qDebug()<<"AV_SAMPLE_FMT_S32";
+            config.setSampleSize(32);
+            config.setSampleType(QAudioFormat::SignedInt);
+            break;
+        case AV_SAMPLE_FMT_FLT:
+            qDebug()<<"AV_SAMPLE_FMT_FLT";
+            config.setSampleSize(32);
+            config.setSampleType(QAudioFormat::Float);
+            break;
+
+        case AV_SAMPLE_FMT_U8P:
+        case AV_SAMPLE_FMT_S16P:
+        case AV_SAMPLE_FMT_S32P:
+        case AV_SAMPLE_FMT_FLTP:
+        case AV_SAMPLE_FMT_DBL:
+        case AV_SAMPLE_FMT_DBLP:
+        case AV_SAMPLE_FMT_S64:
+        case AV_SAMPLE_FMT_S64P:
+            configOk = false;
+            logerror("not soupport:{}", f->format);
+            break;
+        }
+        if(configOk)
+            Init(config);
+        qDebug()<<"audio renderer configOk:"<<configOk << " rate:"<<f->sample_rate
+               <<" channel:"<< f->channels << " initok:"<< IsInited();
+    }
+}
+
 void AudioRender::Uninit(){
     if (m_inited) {
         if (m_device) {
@@ -239,8 +291,9 @@ void AudioRender::Uninit(){
 void AudioRender::PushData(void *pcmData,int size){
     if(m_inited == false)
         return;
-
     m_device->write((const char *)pcmData, size);
+    //qint64 ret = m_device->write((const char *)pcmData, size);
+    //qDebug()<<"wiret audio return:"<<ret;
 }
 
 void AudioRender::PushG711Data(void *g711Data, int size, int lawType){
@@ -276,6 +329,91 @@ IcePlayer::IcePlayer()
     timer_ = std::make_shared<QTimer>();
     connect(timer_.get(), SIGNAL(timeout()), this, SLOT(updateStreamInfo()));
     timer_->start(1000);
+
+
+    //emit player->pictureReady();
+
+    auto avsync = [this]() {
+        bool hasFrame = false;
+        while(!quit_) {
+            int asize = 0;
+            int vsize = 0;
+            std::shared_ptr<MediaFrame> aframe;
+            std::shared_ptr<MediaFrame> vframe;
+            int64_t aPts = -1;
+            int64_t vPts = -1;
+
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                asize = Abuffer_.size();
+                vsize = Vbuffer_.size();
+                if (canRender_ || (asize == 0 && vsize == 0)) {
+                    condition_.wait(lock);
+                    asize = Abuffer_.size();
+                    vsize = Vbuffer_.size();
+
+                    if (asize == 0 && vsize == 0){
+                        continue;
+                    }
+
+                    if (asize > 0){
+                        aframe = Abuffer_.front();
+                        Abuffer_.pop_front();
+                        aPts = aframe->pts;
+                    }
+                    if (vsize > 0){
+                        vframe = Vbuffer_.front();
+                        Vbuffer_.pop_front();
+                        vPts = vframe->pts;
+                    }
+                }
+            }
+
+            bool aRenderFist = false;
+            if ((vPts == -1) || (aPts != -1 && aPts < vPts))
+                aRenderFist = true;
+
+            if (!m_aRenderer.IsInited() && aframe.get() != nullptr){
+                m_aRenderer.Init(aframe);
+            }
+
+            int64_t now = os_gettime_ms();
+            int diff = now - firstFrameTime_;
+
+            if (aRenderFist) {
+                if (diff < aPts - 1) {
+                    //qDebug()<<"a first: asleep:"<<aPts - 1 - diff << "size:"<<aframe->AvFrame()->linesize[0] <<" addr"<<aframe->AvFrame();
+                    os_sleep_ms(aPts - 1 - diff);
+                }
+                 m_aRenderer.PushData(aframe->AvFrame()->data[0], aframe->AvFrame()->linesize[0]);
+                 if (vPts != -1) {
+                     if (diff < vPts - 1) {
+                         //qDebug()<<"a first: vsleep:"<<vPts - 1 - diff;
+                         os_sleep_ms(vPts - 1 - diff);
+                     }
+                     m_vRenderer->SetFrame(vframe);
+                     emit pictureReady();
+                 }
+            } else {
+                if (vPts != -1 && diff < vPts - 1) {
+                    //qDebug()<<"v first: vsleep:"<<vPts - 1 - diff;
+                    os_sleep_ms(vPts - 1 - diff);
+                }
+                m_vRenderer->SetFrame(vframe);
+                emit pictureReady();
+                if (aPts != -1) {
+                    if (diff < aPts - 1) {
+                        //qDebug()<<"v first: asleep:"<<aPts - 1 - diff<< " size:"<<aframe->AvFrame()->linesize[0]<< " addr:"<<aframe->AvFrame();
+                        os_sleep_ms(aPts - 1 - diff);
+                    }
+                    m_aRenderer.PushData(aframe->AvFrame()->data[0], aframe->AvFrame()->linesize[0]);
+                }
+            }
+
+        }
+
+    };
+    avsync_ = std::thread(avsync);
 }
 
 void IcePlayer::updateStreamInfo()
@@ -379,7 +517,7 @@ void IcePlayer::setSourceType(QVariant stype){
     sourceType_ = stype.toInt();
 }
 
-void IcePlayer::Stop() {
+void IcePlayer::StopStream() {
     logger_flush();
     qDebug()<<"iceplayer stop";
     if (m_stream1.get() != nullptr){
@@ -395,66 +533,29 @@ void IcePlayer::Stop() {
 
 }
 
+void IcePlayer::Stop() {
+    hangup();
+    mutex_.lock();
+    quit_ = true;
+    condition_.notify_one();
+    mutex_.unlock();
+    if(avsync_.joinable()) {
+        avsync_.join();
+    }
+}
+
 void IcePlayer::getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame) {
     IcePlayer * player = (IcePlayer *)(userData);
 
-    AVFrame * f = frame->AvFrame();
+    if (player->canRender_ == false)
+        return;
+
     if(frame->GetStreamType() == STREAM_AUDIO) {
         logdebug("audio framepts:{}", frame->pts);
-        if (!player->m_aRenderer.IsInited()) {
-            bool configOk = true;
-            QAudioFormat config;
-            config.setSampleRate(f->sample_rate);
-            config.setChannelCount(f->channels);
-            config.setCodec("audio/pcm");
-            config.setByteOrder(QAudioFormat::LittleEndian);
-
-            switch(f->format) {
-            case AV_SAMPLE_FMT_U8:
-                qDebug()<<"AV_SAMPLE_FMT_U8";
-                config.setSampleSize(8);
-                config.setSampleType(QAudioFormat::UnSignedInt);
-                break;
-            case AV_SAMPLE_FMT_S16:
-                qDebug()<<"AV_SAMPLE_FMT_S16";
-                config.setSampleSize(16);
-                config.setSampleType(QAudioFormat::SignedInt);
-                break;
-            case AV_SAMPLE_FMT_S32:
-                qDebug()<<"AV_SAMPLE_FMT_S32";
-                config.setSampleSize(32);
-                config.setSampleType(QAudioFormat::SignedInt);
-                break;
-            case AV_SAMPLE_FMT_FLT:
-                qDebug()<<"AV_SAMPLE_FMT_FLT";
-                config.setSampleSize(32);
-                config.setSampleType(QAudioFormat::Float);
-                break;
-
-            case AV_SAMPLE_FMT_U8P:
-            case AV_SAMPLE_FMT_S16P:
-            case AV_SAMPLE_FMT_S32P:
-            case AV_SAMPLE_FMT_FLTP:
-            case AV_SAMPLE_FMT_DBL:
-            case AV_SAMPLE_FMT_DBLP:
-            case AV_SAMPLE_FMT_S64:
-            case AV_SAMPLE_FMT_S64P:
-                configOk = false;
-                logerror("not soupport:{}", f->format);
-                break;
-            }
-            if(configOk)
-                player->m_aRenderer.Init(config);
-        }
-
-        if (player->m_aRenderer.IsInited()) {
-            logdebug("playaudo: {}", f->linesize[0]);
-            player->m_aRenderer.PushData(f->data[0], f->linesize[0]);
-        }
+        player->push(std::move(frame));
     } else {
         logdebug("video framepts:{}", frame->pts);
-        player->m_vRenderer->SetFrame(frame);
-        emit player->pictureReady();
+        player->push(std::move(frame));
     }
 }
 
@@ -480,6 +581,7 @@ void IcePlayer::call(QVariant sipAccount){
         }
     }
     makeCall();
+    canRender_ = true;
 }
 
 void IcePlayer::firstAudioPktTime(QString timestr) {
@@ -545,7 +647,7 @@ void IcePlayer::makeCall(){
 void IcePlayer::hangup(){
     qDebug()<<"hangup invoked";
 
-    Stop();
+    StopStream();
     if (sourceType_ == 0) {
         if (iceSource_.get() != nullptr) {
             disconnect(iceSource_.get(), SIGNAL(registerSuccess()), this, SLOT(makeCall()));
@@ -567,9 +669,16 @@ void IcePlayer::hangup(){
         videoFile.close();
     }
 
-    m_aRenderer.Uninit();
     m_vRenderer->ClearFrame();
     window()->update();
+
+    mutex_.lock();
+    m_aRenderer.Uninit();
+    firstFrameTime_ == 0;
+    canRender_ = false;
+    Abuffer_.clear();
+    Vbuffer_.clear();
+    mutex_.unlock();
 
     loginfo("--------------flush----------------");
     logger_flush();
@@ -639,4 +748,18 @@ int IcePlayer::feedFrameCallbackVideo(void *opaque, uint8_t *buf, int buf_size)
         }
     }
     return -1;
+}
+
+void IcePlayer::push(std::shared_ptr<MediaFrame> && frame)
+{
+    std::unique_lock<std::mutex> lock(mutex_);
+    if(firstFrameTime_ == 0) {
+        firstFrameTime_ = os_gettime_ms();
+    }
+    if(frame->GetStreamType() == STREAM_AUDIO) {
+        Abuffer_.emplace_back(frame);
+    } else {
+        Vbuffer_.emplace_back(frame);
+    }
+    condition_.notify_one();
 }

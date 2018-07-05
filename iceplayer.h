@@ -54,6 +54,7 @@ public:
     void PushData(void *pcmData,int size);
     void PushG711Data(void *g711Data, int size, int lawType);
     void Init(QAudioFormat config);
+    void Init(std::shared_ptr<MediaFrame> & frame);
     void Uninit();
     bool IsInited(){return m_inited;}
 private:
@@ -99,11 +100,14 @@ private:
     static void getFrameCallback(void * userData, std::shared_ptr<MediaFrame> & frame);
     static int feedFrameCallbackAudio(void *, uint8_t *buf, int buf_size);
     static int feedFrameCallbackVideo(void *, uint8_t *buf, int buf_size);
+    void push(std::shared_ptr<MediaFrame> && frame);
+    void StopStream();
 
 private:
     qreal m_t;
     QGLRenderer *m_vRenderer;
     AudioRender m_aRenderer;
+    bool quit_ = false;
 
     std::shared_ptr<Input> m_stream1;
     std::shared_ptr<Input> m_stream2;
@@ -114,6 +118,16 @@ private:
     int sourceType_ = 0; // 0 sip, 1 file, 2 h264/pcmu file
 
     std::shared_ptr<QTimer> timer_;
+
+    //同步线程，player上做一个缓冲，同步音频和视频
+    //同步：对齐到同一个墙上时钟，按照各自当前时间渲染
+    int64_t firstFrameTime_ = 0; //可能是音频也可能是视频
+    bool canRender_ = false;
+    std::thread avsync_;
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    std::deque<std::shared_ptr<MediaFrame>> Abuffer_;
+    std::deque<std::shared_ptr<MediaFrame>> Vbuffer_;
 };
 
 #endif // ICEPLAYER_H
