@@ -37,61 +37,41 @@ Window {
             currentIndex: 0
             model: ListModel {
                 id: cbItems
-                ListElement { text: "sip"; color: "Yellow" }
+                ListElement { text: "tutk"; color: "Yellow" }
                 ListElement { text: "file"; color: "Green" }
                 ListElement { text: "h264/pcmu file"; color: "Brown" }
+                ListElement { text: "h264/aac"; color: "Red" }
             }
             textRole: "text"
             width: parent.width
             onCurrentIndexChanged: {
                 console.debug(cbItems.get(currentIndex).text + ", " + cbItems.get(currentIndex).color)
-                icePlayer.setSourceType(soureType.currentIndex)
+            }
+        }
+
+        Column {
+            spacing: 3
+            PickFile {
+                visible: soureType.currentIndex != 0
+                id: avfile1
+                text: soureType.currentIndex == 1 ? "/Users/liuye/Downloads/1517444052127-1517444059607.ts" :"/Users/liuye/qbox/linking/link/libtsuploader/pcdemo/material/h265_aac_1_16000_pcmu_8000.mulaw"
+                promptText: soureType.currentIndex == 1 ? "浏览":"音频文件"
+            }
+
+            PickFile {
+                visible: soureType.currentIndex > 1
+                text: "/Users/liuye/qbox/linking/link/libtsuploader/pcdemo/material/h265_aac_1_16000_h264.h264"
+                promptText: "视频文件"
+                id: avfile2
             }
         }
 
         RowLayout {
-            visible: soureType.currentIndex != 0
-            Button {
-                   id:openBtn
-                   height: 25
-                   text:qsTr("浏览...")
-                   onClicked: {
-                       fds.open();
-                   }
-               }
-               Label {
-                   id: labels
-                   text: qsTr("")
-                   height: 25
-                   color: "white"
-               }
-
-               FileDialog {
-                   id:fds
-                   title: "选择文件"
-                   folder: shortcuts.desktop
-                   selectExisting: true
-                   selectFolder: false
-                   selectMultiple: false
-                   //nameFilters: ["json文件 (*.json)"]
-                   onAccepted: {
-                       labels.text = fds.fileUrl;
-                       console.log("You chose: " + fds.fileUrl);
-                   }
-
-                   onRejected: {
-                       labels.text = "";
-                       console.log("Canceled");
-                   }
-
-               }
-        }
-
-        RowLayout {
+            visible: soureType.currentIndex == 0
             //anchors.fill: parent //奇怪的是会影响spacing，变得很大
             spacing: 6
             Rectangle{
-                id: mytext
+                id: idlabel
                 color: "#aaaaaa"
                 Layout.fillWidth: true
                 Layout.minimumWidth: 50
@@ -100,13 +80,13 @@ Window {
                 Layout.minimumHeight: 30
                 Text{
                     color: "#f2f5f5"
-                    text: "contact"
+                    text: "id"
                     font.pointSize: 20
                 }
             }
 
             LineEdit {
-                id: lineEdit
+                id: myid
 
                 Layout.fillWidth: true
                 Layout.minimumWidth: 100
@@ -116,13 +96,54 @@ Window {
                 input.font.pointSize: 20
 
                 input.color: "blue"
+                text: "CVUUBN1MP9BWAN6GU1MJ"//"C3PA9N1WYDBCAMPGU1Y1" //"CVUUBN1MP9BWAN6GU1MJ"
 
                 Component.onCompleted: {
-                    console.log("xxxxxxxxxxxxxxLineEdit", width, parent.width, mytext.width)
+                    console.log("xxxxxxxxxxxxxxLineEdit", width, parent.width, myid.width)
                 }
             }
 
         }
+
+        RowLayout {
+            visible: soureType.currentIndex == 0
+            //anchors.fill: parent //奇怪的是会影响spacing，变得很大
+            spacing: 6
+            Rectangle{
+                id: pwdlabel
+                color: "#aaaaaa"
+                Layout.fillWidth: true
+                Layout.minimumWidth: 50
+                Layout.preferredWidth: 100
+                Layout.maximumWidth: 100
+                Layout.minimumHeight: 30
+                Text{
+                    color: "#f2f5f5"
+                    text: "pwd"
+                    font.pointSize: 20
+                }
+            }
+
+            LineEdit {
+                id: mypwd
+
+                Layout.fillWidth: true
+                Layout.minimumWidth: 100
+                Layout.preferredWidth: 300
+                Layout.maximumWidth: 300
+                Layout.minimumHeight: 30
+                input.font.pointSize: 20
+
+                input.color: "blue"
+                text: "8888iIJj"
+
+                Component.onCompleted: {
+                    console.log("xxxxxxxxxxxxxxLineEdit", width, parent.width, mypwd.width)
+                }
+            }
+
+        }
+
 
 
         RowLayout{
@@ -130,15 +151,19 @@ Window {
 
             Button {
                 id: call
-                text: "call"
+                text: "play"
 
                 Layout.fillWidth: true
-                Layout.preferredWidth: window.width / 2 - 3
+                Layout.preferredWidth: window.width / 3 - 3
                 Layout.preferredHeight: 40
 
                 onClicked: {
-                    icePlayer.call(lineEdit.text)
-                    console.log("call button pressed")
+                    if (soureType.currentIndex === 0)
+                        icePlayer.play(soureType.currentIndex, myid.text, mypwd.text)
+                    else {
+                        icePlayer.play(soureType.currentIndex, avfile1.text, avfile2.text)
+                        console.log("play button pressed", avfile1.text, avfile2.text)
+                    }
                 }
 
                 background: Rectangle {
@@ -149,24 +174,44 @@ Window {
                 }
             }
 
-
             Button {
-                id: hangup
-                text: "hangup"
+                id: audio
+                text: "playaudio"
 
                 Layout.fillWidth: true
-                Layout.preferredWidth: window.width / 2 - 3
+                Layout.preferredWidth: window.width / 3 - 3
+                Layout.preferredHeight: 40
+
+                onClicked: {
+                    if (soureType.currentIndex === 0)
+                        icePlayer.playAudio()
+                }
+
+                background: Rectangle {
+                    color: call.down ? "#66ff53" : "#00ff00"
+                    border.color: "gray"
+                    border.width: 2
+                    radius: 4
+                }
+            }
+
+            Button {
+                id: stop
+                text: "stop"
+
+                Layout.fillWidth: true
+                Layout.preferredWidth: window.width / 3 - 3
                 Layout.preferredHeight: 40
 
                 onClicked: {
                     firstAudioTime.text="yyyy-MM-dd hh:mm:ss.zzz"
                     firstVideoTime.text="yyyy-MM-dd hh:mm:ss.zzz"
-                    icePlayer.hangup()
-                    console.log("hangup button pressed")
+                    icePlayer.stop()
+                    console.log("stop button pressed")
                 }
 
                 background: Rectangle {
-                    color: hangup.down ? "#ff4411" : "#ff0000"
+                    color: stop.down ? "#ff4411" : "#ff0000"
                     border.color: "gray"
                     border.width: 2
                     radius: 4
@@ -273,7 +318,7 @@ Window {
 
     onClosing: {
         console.log("closesssssssssssss")
-        icePlayer.Stop()
+        icePlayer.stop()
         Qt.quit()
     }
 
